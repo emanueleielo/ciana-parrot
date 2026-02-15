@@ -100,7 +100,8 @@ class MessageRouter:
         set_current_context(msg.channel, msg.chat_id)
 
         # Format user message with context
-        formatted = f"[{msg.user_name}]: {clean_text}"
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        formatted = f"[{now}] [{msg.user_name}]: {clean_text}"
 
         # Log incoming
         self._log_message(thread_id, "user", clean_text, msg)
