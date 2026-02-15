@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Data (runtime)
+data/checkpoints.db
+workspace/sessions/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

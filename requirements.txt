@@ -1,0 +1,21 @@
+# CianaParrot - Dependencies
+# Core
+deepagents>=0.4.0
+langgraph-checkpoint-sqlite>=2.0.0
+langchain-mcp-adapters>=0.1.0
+langchain-anthropic>=0.3.0
+langchain-openai>=0.3.0
+langchain-ollama>=0.3.0
+langchain-google-genai>=2.0.0
+langchain-groq>=0.2.0
+python-telegram-bot>=22.0
+pyyaml>=6.0
+croniter>=1.0
+httpx>=0.27.0
+markdownify>=0.13
+
+# Dev
+# pytest
+# pytest-asyncio
+# ruff
+# mypy

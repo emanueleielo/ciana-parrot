@@ -1,0 +1,10 @@
+services:
+  cianaparrot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./workspace:/app/workspace
+      - ./data:/app/data
+      - ./skills:/app/skills
+      - ./config.yaml:/app/config.yaml:ro

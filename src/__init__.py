@@ -1,0 +1,1 @@
+"""CianaParrot - AI personal assistant."""
