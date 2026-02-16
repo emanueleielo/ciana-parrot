@@ -24,7 +24,7 @@ CianaParrot is a minimal but complete AI personal assistant that runs on your ow
 - **Multi-channel** — Pluggable architecture, Telegram out of the box
 - **Scheduled tasks** — Cron, interval, and one-shot tasks
 - **Web tools** — Search (Brave / DuckDuckGo) and URL fetching built in
-- **Skills system** — Drop a Python file in `skills/` and it just works
+- **Skills system** — Add a folder in `skills/` with a `SKILL.md` and a `skill.py`, and it auto-registers
 - **MCP support** — Connect external MCP servers for unlimited extensibility
 - **Persistent memory** — Markdown-based identity and memory the agent updates itself
 - **Docker-only deploy** — One command to build, one to run
