@@ -47,6 +47,8 @@ class Scheduler:
         while self._running:
             try:
                 await self._check_and_run()
+            except (json.JSONDecodeError, OSError) as e:
+                logger.error("Scheduler failed to read tasks file: %s", e)
             except Exception:
                 logger.exception("Scheduler check error")
             await asyncio.sleep(self._poll_interval)
@@ -122,7 +124,7 @@ class Scheduler:
                 if next_run.tzinfo is None:
                     next_run = next_run.replace(tzinfo=timezone.utc)
                 return now >= next_run
-            except Exception:
+            except (KeyError, ValueError, TypeError):
                 logger.warning("Invalid cron expression: %s", task["value"])
                 return False
 
