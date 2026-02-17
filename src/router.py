@@ -31,7 +31,8 @@ class MessageRouter:
         try:
             with open(path) as f:
                 return json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to load allowed_users.json: %s", e)
             return {}
 
     def get_thread_id(self, channel: str, chat_id: str) -> str:
