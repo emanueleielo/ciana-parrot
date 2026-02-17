@@ -17,6 +17,8 @@ from .base import AbstractChannel, IncomingMessage
 
 logger = logging.getLogger(__name__)
 
+TELEGRAM_MAX_MESSAGE_LEN = 4096
+
 
 class TelegramChannel(AbstractChannel):
     """Telegram channel adapter."""
@@ -60,8 +62,7 @@ class TelegramChannel(AbstractChannel):
         """Send message via Telegram. Uses HTML parse mode."""
         if not self._app:
             return
-        # Split long messages (Telegram limit: 4096 chars)
-        for chunk in _split_text(text, 4096):
+        for chunk in _split_text(text, TELEGRAM_MAX_MESSAGE_LEN):
             await self._app.bot.send_message(
                 chat_id=int(chat_id),
                 text=chunk,

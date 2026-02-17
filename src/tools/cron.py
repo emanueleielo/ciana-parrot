@@ -10,6 +10,8 @@ from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
 
+PROMPT_PREVIEW_LEN = 60
+
 # Module-level config, set by init_cron_tools()
 _data_file: str = "./data/scheduled_tasks.json"
 
@@ -75,7 +77,7 @@ def schedule_task(prompt: str, schedule_type: str, schedule_value: str) -> str:
     _save_tasks(tasks)
 
     logger.info("Scheduled task %s: %s (%s: %s) -> %s/%s",
-                task["id"], prompt[:50], schedule_type, schedule_value,
+                task["id"], prompt[:PROMPT_PREVIEW_LEN], schedule_type, schedule_value,
                 _current_channel, _current_chat_id)
     return f"Task scheduled: id={task['id']}, type={schedule_type}, value={schedule_value}"
 
@@ -91,7 +93,7 @@ def list_tasks() -> str:
     lines = []
     for t in active:
         lines.append(
-            f"- [{t['id']}] {t['type']}={t['value']} | {t['prompt'][:60]}"
+            f"- [{t['id']}] {t['type']}={t['value']} | {t['prompt'][:PROMPT_PREVIEW_LEN]}"
             f" | last_run={t.get('last_run', 'never')}"
         )
     return "\n".join(lines)
