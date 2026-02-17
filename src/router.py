@@ -85,6 +85,11 @@ class MessageRouter:
             logger.warning("Blocked message from unauthorized user: %s/%s", msg.channel, msg.user_id)
             return None
 
+        # Handle session reset
+        if msg.reset_session:
+            self.reset_session(msg.channel, msg.chat_id)
+            return None
+
         # Trigger check
         trigger = channel_config.get("trigger", "@Ciana")
         should_respond, clean_text = self.should_respond(msg, trigger)
