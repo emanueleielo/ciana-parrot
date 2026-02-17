@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import signal
-import sys
 
 from .config import load_config
 from .agent import create_cianaparrot_agent
