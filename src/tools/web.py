@@ -9,6 +9,8 @@ from markdownify import markdownify
 
 logger = logging.getLogger(__name__)
 
+MAX_CONTENT_LENGTH = 15_000
+
 # Module-level config, set by init_web_tools()
 _brave_api_key: Optional[str] = None
 _fetch_timeout: int = 30
@@ -115,11 +117,11 @@ def web_fetch(url: str) -> str:
         if "html" in content_type:
             md = markdownify(resp.text, strip=["script", "style", "nav", "footer"])
             # Trim to reasonable length
-            if len(md) > 15000:
-                md = md[:15000] + "\n\n... (truncated)"
+            if len(md) > MAX_CONTENT_LENGTH:
+                md = md[:MAX_CONTENT_LENGTH] + "\n\n... (truncated)"
             return md
         # Plain text or other
-        text = resp.text[:15000]
+        text = resp.text[:MAX_CONTENT_LENGTH]
         return text
     except Exception as e:
         return f"Error fetching {url}: {e}"
