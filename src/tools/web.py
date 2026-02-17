@@ -62,7 +62,6 @@ def _ddg_search(query: str, max_results: int) -> str:
         def __init__(self):
             super().__init__()
             self.results: list[dict] = []
-            self._in_result = False
             self._in_title = False
             self._in_snippet = False
             self._current: dict = {}
