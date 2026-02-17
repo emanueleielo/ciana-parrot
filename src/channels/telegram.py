@@ -103,10 +103,21 @@ class TelegramChannel(AbstractChannel):
         )
 
     async def _cmd_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Reset session by signaling the router."""
-        chat_id = str(update.effective_chat.id)
-        # Store reset flag in context for router to pick up
-        context.chat_data["reset_session"] = True
+        """Reset session by sending a reset signal through the callback."""
+        if not self._callback:
+            return
+        chat = update.effective_chat
+        user = update.effective_user
+        msg = IncomingMessage(
+            channel=self.name,
+            chat_id=str(chat.id),
+            user_id=str(user.id) if user else "unknown",
+            user_name=user.first_name if user else "unknown",
+            text="",
+            is_private=chat.type == "private",
+            reset_session=True,
+        )
+        await self._callback(msg)
         await update.message.reply_text("Session reset. Let's start fresh!")
 
     async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

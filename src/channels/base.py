@@ -16,6 +16,7 @@ class IncomingMessage:
     is_private: bool = False
     reply_to: Optional[str] = None
     file_path: Optional[str] = None
+    reset_session: bool = False
 
 
 class AbstractChannel(ABC):
