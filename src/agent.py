@@ -7,7 +7,8 @@ from pathlib import Path
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langchain.chat_models import init_chat_model
-from langgraph.checkpoint.memory import MemorySaver
+import aiosqlite
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from .tools.web import web_search, web_fetch, init_web_tools
 from .tools.cron import schedule_task, list_tasks, cancel_task, init_cron_tools
@@ -103,8 +104,11 @@ async def create_cianaparrot_agent(config: dict):
         except Exception as e:
             logger.warning("Failed to load MCP tools: %s", e)
 
-    # Checkpointer (in-memory, sessions persist via JSONL logs)
-    checkpointer = MemorySaver()
+    # Checkpointer (SQLite for persistence across restarts)
+    db_path = str(Path(workspace, "checkpoints.db"))
+    conn = await aiosqlite.connect(db_path)
+    checkpointer = AsyncSqliteSaver(conn)
+    await checkpointer.setup()
 
     # Create agent
     all_tools = custom_tools + mcp_tools
@@ -114,7 +118,7 @@ async def create_cianaparrot_agent(config: dict):
         memory=memory_files,
         skills=skills_dirs if skills_dirs else None,
         tools=all_tools,
-        backend=FilesystemBackend(root_dir=workspace),
+        backend=FilesystemBackend(root_dir=workspace, virtual_mode=True),
         checkpointer=checkpointer,
     )
 
