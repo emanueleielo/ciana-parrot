@@ -227,6 +227,51 @@ make restart   # Restart
 make shell     # Shell into container
 ```
 
+## Host Filesystem Access
+
+The agent runs inside Docker and is sandboxed to the `workspace/` directory. To let it read or write files on your host machine, mount host directories as subdirectories of `workspace/` in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ./workspace:/app/workspace
+  - /path/to/your/folder:/app/workspace/host/folder-name
+```
+
+The agent can then access the files using its built-in tools (`ls`, `read_file`, `write_file`, etc.) at `host/folder-name/`.
+
+### Read-only access
+
+Append `:ro` to the volume mount to prevent the agent from modifying files:
+
+```yaml
+- ~/Documents:/app/workspace/host/documents:ro
+```
+
+### Read-write access
+
+Omit the `:ro` suffix to allow the agent to create and edit files:
+
+```yaml
+- ~/Projects:/app/workspace/host/projects
+```
+
+### Example
+
+```yaml
+services:
+  cianaparrot:
+    volumes:
+      - ./workspace:/app/workspace
+      - ./data:/app/data
+      - ./skills:/app/skills
+      - ./config.yaml:/app/config.yaml:ro
+      - ~/Documents:/app/workspace/host/documents:ro
+      - ~/Projects:/app/workspace/host/projects
+      - ~/Notes:/app/workspace/host/notes
+```
+
+After editing `docker-compose.yml`, restart with `make restart` (or `make build && make up` if you also changed the image).
+
 ## Customizing the Agent
 
 The agent's behavior is fully controlled by three markdown files in `workspace/`:
