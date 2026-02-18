@@ -2,8 +2,10 @@
 .env
 
 # Data (runtime)
-data/checkpoints.db
+data/allowed_users.json
+data/scheduled_tasks.json
 workspace/sessions/
+workspace/checkpoints.db*
 
 # Python
 __pycache__/
