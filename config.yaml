@@ -10,9 +10,9 @@ provider:
   api_key: "${ANTHROPIC_API_KEY}"
   temperature: 0
   max_tokens: 8192
-  # Per OpenRouter/vLLM:
+  # For OpenRouter/vLLM:
   # base_url: "https://openrouter.ai/api/v1"
-  # Per Ollama:
+  # For Ollama:
   # base_url: "http://localhost:11434"
 
 channels:
@@ -20,11 +20,11 @@ channels:
     enabled: true
     token: "${TELEGRAM_BOT_TOKEN}"
     trigger: "@Ciana"
-    allowed_users: []            # Vuoto = tutti
+    allowed_users: []            # Empty = allow all
 
 scheduler:
   enabled: true
-  poll_interval: 60              # Secondi tra check task
+  poll_interval: 60              # Seconds between task checks
   data_file: "./data/scheduled_tasks.json"
 
 mcp_servers: {}
@@ -38,7 +38,7 @@ skills:
   enabled: true
 
 web:
-  brave_api_key: "${BRAVE_API_KEY}"  # Opzionale, fallback DuckDuckGo
+  brave_api_key: "${BRAVE_API_KEY}"  # Optional, falls back to DuckDuckGo
   fetch_timeout: 42
 
 logging:
