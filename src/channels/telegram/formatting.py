@@ -9,12 +9,14 @@ TELEGRAM_MAX_MESSAGE_LEN = 4096
 def md_to_telegram_html(text: str) -> str:
     """Convert Markdown to Telegram-compatible HTML."""
     # Split out fenced code blocks to protect them from further processing
-    parts = re.split(r"(```[\s\S]*?```)", text)
+    # Require closing ``` on its own line to avoid false matches
+    # when tool results contain ``` mid-line
+    parts = re.split(r"(```\w*\n[\s\S]*?\n```)", text)
     result = []
     for i, part in enumerate(parts):
         if i % 2 == 1:
             # Fenced code block
-            m = re.match(r"```(\w*)\n?([\s\S]*?)```", part)
+            m = re.match(r"```(\w*)\n([\s\S]*?)\n```", part)
             if m:
                 lang, code = m.group(1), m.group(2).rstrip()
                 escaped = html.escape(code)
@@ -69,6 +71,12 @@ def _md_inline_to_html(text: str) -> str:
         text = text.replace(f"\x00CODE{idx}\x00", f"<code>{code}</code>")
 
     return text
+
+
+def strip_html_tags(text: str) -> str:
+    """Remove HTML tags and unescape entities for plain-text fallback."""
+    cleaned = re.sub(r"<[^>]+>", "", text)
+    return html.unescape(cleaned)
 
 
 def split_text(text: str, max_len: int) -> list[str]:

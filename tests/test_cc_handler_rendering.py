@@ -15,7 +15,7 @@ class TestRenderCcResponse:
         compact, details = _render_cc_response(resp)
         assert "error" in compact.lower()
         assert "Something went wrong" in compact
-        assert details == ""
+        assert details == []
 
     def test_multiline_error(self):
         resp = CCResponse(error="line1\nline2")
@@ -27,7 +27,7 @@ class TestRenderCcResponse:
         resp = CCResponse(events=[TextEvent(text="Hello world")])
         compact, details = _render_cc_response(resp)
         assert compact == "Hello world"
-        assert details == ""
+        assert details == []
 
     def test_tool_call_compact(self):
         resp = CCResponse(events=[
@@ -51,8 +51,9 @@ class TestRenderCcResponse:
         ])
         compact, details = _render_cc_response(resp)
         assert "Bash" in compact
-        assert "file1.txt" in details
-        assert "file2.txt" in details
+        assert len(details) == 1
+        assert "file1.txt" in details[0]
+        assert "file2.txt" in details[0]
 
     def test_tool_error_inline(self):
         resp = CCResponse(events=[
@@ -106,7 +107,8 @@ class TestRenderCcResponse:
         compact, details = _render_cc_response(resp)
         assert "Glob" in compact
         # Details should show checkmark for no-result tools
-        assert "\u2714" in details
+        assert len(details) == 1
+        assert "\u2714" in details[0]
 
     def test_tool_no_summary(self):
         resp = CCResponse(events=[
