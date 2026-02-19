@@ -34,8 +34,9 @@ CianaParrot is a minimal but complete AI personal assistant that runs on your ow
 ## Architecture
 
 <p align="center">
-  <img src="images/architecture.png" alt="CianaParrot Architecture" width="700">
+  <img src="images/architecture.svg" alt="CianaParrot Architecture" width="800">
 </p>
+
 
 ## Quick Start
 
@@ -236,11 +237,6 @@ This pattern is useful for any tool that needs direct host access — native CLI
 The bridge system is extensible: the same HTTP bridge + mode handler pattern can be reused to integrate other host-side tools.
 
 ### How it works
-
-```
-Telegram → CianaParrot (Docker) → HTTP POST → Bridge server (host) → CLI tool
-                                  ← JSON response ← stdout/stderr ←
-```
 
 1. The user enters a **mode** in Telegram (e.g., `/cc` for Claude Code)
 2. Messages are intercepted by the mode handler instead of going to the main agent
