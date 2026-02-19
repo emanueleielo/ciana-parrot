@@ -8,22 +8,25 @@ from pathlib import Path
 
 from croniter import croniter
 
+from .agent_response import extract_agent_response
+from .config import AppConfig
+from .tools.cron import get_tasks_lock
+
 logger = logging.getLogger(__name__)
 
 
 class Scheduler:
     """Polls scheduled_tasks.json and executes due tasks."""
 
-    def __init__(self, agent, config: dict, channels: dict = None):
+    def __init__(self, agent, config: AppConfig, channels: dict = None):
         self._agent = agent
         self._config = config
-        self._poll_interval = config.get("scheduler", {}).get("poll_interval", 60)
-        self._data_file = config.get("scheduler", {}).get(
-            "data_file", "./data/scheduled_tasks.json"
-        )
+        self._poll_interval = config.scheduler.poll_interval
+        self._data_file = config.scheduler.data_file
         self._channels = channels or {}  # name -> channel instance
         self._running = False
         self._task: asyncio.Task | None = None
+        self._running_tasks: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         """Start the scheduler loop."""
@@ -40,6 +43,9 @@ class Scheduler:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        if self._running_tasks:
+            logger.info("Draining %d running task(s)…", len(self._running_tasks))
+            await asyncio.gather(*self._running_tasks, return_exceptions=True)
         logger.info("Scheduler stopped")
 
     async def _loop(self) -> None:
@@ -54,34 +60,45 @@ class Scheduler:
             await asyncio.sleep(self._poll_interval)
 
     async def _check_and_run(self) -> None:
-        """Check for due tasks and run them."""
+        """Check for due tasks and run them.
+
+        The check phase (read + mark due + write) runs under the shared
+        tasks lock so cron tool mutations don't race.  Execution happens
+        outside the lock via parallel create_task calls.
+        """
         path = Path(self._data_file)
         if not path.exists():
             return
 
-        with open(path) as f:
-            tasks = json.load(f)
+        due_tasks: list[dict] = []
 
-        now = datetime.now(timezone.utc)
-        modified = False
+        async with get_tasks_lock():
+            with open(path) as f:
+                tasks = json.load(f)
 
-        for task in tasks:
-            if not task.get("active", True):
-                continue
+            now = datetime.now(timezone.utc)
+            modified = False
 
-            if self._is_due(task, now):
-                logger.info("Running scheduled task: %s", task["id"])
-                await self._execute_task(task)
-                task["last_run"] = now.isoformat()
-                modified = True
+            for task in tasks:
+                if not task.get("active", True):
+                    continue
+                if self._is_due(task, now):
+                    task["last_run"] = now.isoformat()
+                    if task["type"] == "once":
+                        task["active"] = False
+                    modified = True
+                    due_tasks.append(dict(task))  # snapshot for execution
 
-                # Deactivate one-shot tasks
-                if task["type"] == "once":
-                    task["active"] = False
+            if modified:
+                with open(path, "w") as f:
+                    json.dump(tasks, f, indent=2)
 
-        if modified:
-            with open(path, "w") as f:
-                json.dump(tasks, f, indent=2)
+        # Execute due tasks in parallel, outside the lock
+        for task in due_tasks:
+            logger.info("Running scheduled task: %s", task["id"])
+            t = asyncio.create_task(self._execute_task(task))
+            self._running_tasks.add(t)
+            t.add_done_callback(self._running_tasks.discard)
 
     def _is_due(self, task: dict, now: datetime) -> bool:
         """Check if a task is due to run."""
@@ -138,14 +155,15 @@ class Scheduler:
                 {"messages": [{"role": "user", "content": task["prompt"]}]},
                 config={"configurable": {"thread_id": thread_id}},
             )
-            response = result["messages"][-1].content
+            agent_resp = extract_agent_response(result)
+            response = agent_resp.text
 
             # Send result to the channel that created the task
             channel_name = task.get("channel")
             chat_id = task.get("chat_id")
             if channel_name and chat_id and channel_name in self._channels:
                 channel = self._channels[channel_name]
-                await channel.send(chat_id, response)
+                await channel.send(chat_id, response, disable_notification=True)
                 logger.info("Scheduler sent result to %s/%s", channel_name, chat_id)
             else:
                 logger.warning("Task %s has no valid channel/chat_id, result discarded", task["id"])

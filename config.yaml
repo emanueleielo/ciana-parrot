@@ -41,5 +41,15 @@ web:
   brave_api_key: "${BRAVE_API_KEY}"  # Optional, falls back to DuckDuckGo
   fetch_timeout: 42
 
+claude_code:
+  enabled: true
+  bridge_url: "http://host.docker.internal:9842"    # Host bridge for Claude Code execution
+  bridge_port: 9842                                  # Port the host bridge listens on
+  bridge_token: "${CC_BRIDGE_TOKEN}"                 # Auth token (must match server.py)
+  projects_dir: "/app/.claude-projects"              # Mounted read-only from host ~/.claude/projects
+  permission_mode: "bypassPermissions"               # Auto-approve (non-interactive -p mode)
+  timeout: 0                                         # 0 = no timeout (wait indefinitely)
+  # claude_path: "claude"                           # Path to claude binary (local mode only)
+
 logging:
   level: "INFO"                  # DEBUG | INFO | WARNING | ERROR
