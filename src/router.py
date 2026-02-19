@@ -9,6 +9,7 @@ from typing import Optional
 from .agent_response import AgentResponse, extract_agent_response
 from .channels.base import IncomingMessage
 from .config import AppConfig, TelegramChannelConfig
+from .store import JsonStore
 from .tools.cron import set_current_context
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,12 @@ class MessageRouter:
         self._config = config
         self._workspace = config.agent.workspace
         self._allowed_users = self._load_allowed_users()
-        # Track session resets (channel_chatid -> counter)
-        self._session_counters: dict[str, int] = {}
+        # Track session resets (persisted so /new survives container restarts)
+        self._session_store = JsonStore(Path(self._workspace, "session_counters.json"))
+        self._session_counters: dict[str, int] = {
+            k: v for k, v in self._session_store.all().items()
+            if isinstance(v, int)
+        }
 
     def _load_allowed_users(self) -> dict[str, list[str]]:
         """Load allowed users from channel configs."""
@@ -45,6 +50,7 @@ class MessageRouter:
         """Reset session for a chat (called by /new command)."""
         key = f"{channel}_{chat_id}"
         self._session_counters[key] = self._session_counters.get(key, 0) + 1
+        self._session_store.set(key, self._session_counters[key])
         logger.info("Session reset: %s -> s%d", key, self._session_counters[key])
 
     def is_user_allowed(self, channel: str, user_id: str) -> bool:

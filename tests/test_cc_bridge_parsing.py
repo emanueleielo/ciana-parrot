@@ -1,15 +1,13 @@
-"""Tests for Claude Code bridge — NDJSON parsing, _summarize_tool_input, _extract_tool_result_text."""
+"""Tests for Claude Code bridge — NDJSON parsing, summarize_tool_input, extract_tool_result_text."""
 
 import json
 
 import pytest
 
-from src.bridges.claude_code.bridge import (
-    ClaudeCodeBridge,
-    CCResponse,
-    TextEvent,
-    ToolCallEvent,
-    ThinkingEvent,
+from src.bridges.claude_code.bridge import ClaudeCodeBridge, CCResponse
+from src.events import (
+    TextEvent, ToolCallEvent, ThinkingEvent,
+    summarize_tool_input, extract_tool_result_text,
 )
 from src.config import AppConfig, ClaudeCodeConfig
 
@@ -27,71 +25,71 @@ def bridge(tmp_path) -> ClaudeCodeBridge:
 
 class TestSummarizeToolInput:
     def test_read_file(self):
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "Read", {"file_path": "/src/main.py"}
         )
         assert result == "main.py"
 
     def test_edit_file(self):
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "Edit", {"file_path": "/path/to/file.txt"}
         )
         assert result == "file.txt"
 
     def test_glob_pattern(self):
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "Glob", {"pattern": "**/*.py"}
         )
         assert result == "**/*.py"
 
     def test_bash_command(self):
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "Bash", {"command": "git status"}
         )
         assert result == "git status"
 
     def test_bash_long_command(self):
         cmd = "x" * 100
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "Bash", {"command": cmd}
         )
         assert result.endswith("...")
         assert len(result) <= 74  # 70 + "..."
 
     def test_fallback_known_keys(self):
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "CustomTool", {"query": "search term"}
         )
         assert result == "search term"
 
     def test_fallback_any_string_value(self):
-        result = ClaudeCodeBridge._summarize_tool_input(
+        result = summarize_tool_input(
             "CustomTool", {"data": "some value"}
         )
         assert result == "some value"
 
     def test_empty_input(self):
-        result = ClaudeCodeBridge._summarize_tool_input("Tool", {})
+        result = summarize_tool_input("Tool", {})
         assert result == ""
 
     def test_empty_file_path(self):
-        result = ClaudeCodeBridge._summarize_tool_input("Read", {"file_path": ""})
+        result = summarize_tool_input("Read", {"file_path": ""})
         assert result == ""
 
 
 class TestExtractToolResultText:
     def test_none(self):
-        assert ClaudeCodeBridge._extract_tool_result_text(None) == ""
+        assert extract_tool_result_text(None) == ""
 
     def test_string(self):
-        assert ClaudeCodeBridge._extract_tool_result_text("  hello  ") == "hello"
+        assert extract_tool_result_text("  hello  ") == "hello"
 
     def test_list_text_blocks(self):
         content = [
             {"type": "text", "text": "line 1"},
             {"type": "text", "text": "line 2"},
         ]
-        result = ClaudeCodeBridge._extract_tool_result_text(content)
+        result = extract_tool_result_text(content)
         assert "line 1" in result
         assert "line 2" in result
 
@@ -101,27 +99,27 @@ class TestExtractToolResultText:
             {"type": "image"},
             {"type": "text", "text": "after"},
         ]
-        result = ClaudeCodeBridge._extract_tool_result_text(content)
+        result = extract_tool_result_text(content)
         assert "[image]" in result
         assert "before" in result
 
     def test_list_strings(self):
         content = ["plain string"]
-        result = ClaudeCodeBridge._extract_tool_result_text(content)
+        result = extract_tool_result_text(content)
         assert result == "plain string"
 
     def test_dict_text_type(self):
         content = {"type": "text", "text": "  result  "}
-        result = ClaudeCodeBridge._extract_tool_result_text(content)
+        result = extract_tool_result_text(content)
         assert result == "result"
 
     def test_dict_other_type(self):
         content = {"type": "data", "value": 42}
-        result = ClaudeCodeBridge._extract_tool_result_text(content)
+        result = extract_tool_result_text(content)
         assert "42" in result
 
     def test_other_type(self):
-        assert ClaudeCodeBridge._extract_tool_result_text(42) == "42"
+        assert extract_tool_result_text(42) == "42"
 
 
 class TestParseNdjsonResponse:
