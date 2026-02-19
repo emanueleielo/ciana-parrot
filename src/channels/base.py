@@ -1,8 +1,19 @@
 """Abstract base class for channel adapters."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Awaitable, Optional
+from typing import TYPE_CHECKING, Callable, Awaitable, Optional
+
+if TYPE_CHECKING:
+    from ..agent_response import AgentResponse
+
+
+@dataclass
+class SendResult:
+    """Result of a send operation."""
+    message_id: Optional[str] = None
 
 
 @dataclass
@@ -17,6 +28,7 @@ class IncomingMessage:
     reply_to: Optional[str] = None
     file_path: Optional[str] = None
     reset_session: bool = False
+    message_id: Optional[str] = None
 
 
 class AbstractChannel(ABC):
@@ -35,7 +47,9 @@ class AbstractChannel(ABC):
         ...
 
     @abstractmethod
-    async def send(self, chat_id: str, text: str) -> None:
+    async def send(self, chat_id: str, text: str, *,
+                   reply_to_message_id: Optional[str] = None,
+                   disable_notification: bool = False) -> Optional[SendResult]:
         """Send a text message to a chat."""
         ...
 
@@ -44,6 +58,6 @@ class AbstractChannel(ABC):
         """Send a file to a chat."""
         ...
 
-    def on_message(self, callback: Callable[[IncomingMessage], Awaitable[str]]) -> None:
+    def on_message(self, callback: Callable[[IncomingMessage], Awaitable[Optional["AgentResponse"]]]) -> None:
         """Register the message handler callback."""
         self._callback = callback
