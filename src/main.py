@@ -4,6 +4,7 @@ import asyncio
 import logging
 import signal
 
+from .bridges.claude_code import setup_bridge
 from .config import load_config
 from .agent import create_cianaparrot_agent
 from .router import MessageRouter
@@ -18,9 +19,8 @@ async def main() -> None:
     config = load_config()
 
     # Logging
-    log_level = config.get("logging", {}).get("level", "INFO")
     logging.basicConfig(
-        level=getattr(logging, log_level, logging.INFO),
+        level=getattr(logging, config.logging.level, logging.INFO),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -35,11 +35,12 @@ async def main() -> None:
 
     # Channels
     channels = []
-    channels_config = config.get("channels", {})
 
-    if channels_config.get("telegram", {}).get("enabled"):
-        tg_config = channels_config["telegram"]
+    if config.channels.telegram.enabled:
+        tg_config = config.channels.telegram
         tg = TelegramChannel(tg_config)
+
+        await setup_bridge(config, tg)
 
         async def tg_callback(msg):
             return await router.handle_message(msg, tg_config)
@@ -55,7 +56,7 @@ async def main() -> None:
 
     # Scheduler (with channel references for sending results)
     scheduler = None
-    if config.get("scheduler", {}).get("enabled"):
+    if config.scheduler.enabled:
         channels_map = {ch.name: ch for ch in channels}
         scheduler = Scheduler(agent, config, channels=channels_map)
         await scheduler.start()

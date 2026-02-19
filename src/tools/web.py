@@ -7,6 +7,8 @@ import httpx
 from langchain_core.tools import tool
 from markdownify import markdownify
 
+from ..config import WebConfig
+
 logger = logging.getLogger(__name__)
 
 MAX_CONTENT_LENGTH = 15_000
@@ -16,12 +18,11 @@ _brave_api_key: Optional[str] = None
 _fetch_timeout: int = 30
 
 
-def init_web_tools(config: dict) -> None:
+def init_web_tools(config: WebConfig) -> None:
     """Initialize web tools with config values."""
     global _brave_api_key, _fetch_timeout
-    web_cfg = config.get("web", {})
-    _brave_api_key = web_cfg.get("brave_api_key") or None
-    _fetch_timeout = web_cfg.get("fetch_timeout", 30)
+    _brave_api_key = config.brave_api_key
+    _fetch_timeout = config.fetch_timeout
 
 
 @tool

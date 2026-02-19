@@ -3,8 +3,11 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./workspace:/app/workspace
       - ./data:/app/data
       - ./skills:/app/skills
       - ./config.yaml:/app/config.yaml:ro
+      - ~/.claude/projects:/app/.claude-projects:ro  # Claude Code sessions (read-only)
