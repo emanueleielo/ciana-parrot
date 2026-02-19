@@ -61,7 +61,6 @@ class ConversationInfo:
     timestamp: datetime
     message_count: int
     git_branch: str = ""
-    cwd: str = ""
 
 
 @dataclass
@@ -201,9 +200,13 @@ class ClaudeCodeBridge:
     # --- Private helpers ---
 
     def _build_command(self, text: str, state: UserSession) -> list[str]:
+        import re
         cmd = [self._claude_path, "-p"]
         if state.active_session_id:
-            cmd.extend(["--resume", state.active_session_id])
+            if not re.fullmatch(r"[a-zA-Z0-9_-]+", state.active_session_id):
+                logger.warning("Invalid session ID format: %r", state.active_session_id)
+            else:
+                cmd.extend(["--resume", state.active_session_id])
         cmd.extend(["--output-format", "stream-json", "--verbose"])
         if self._permission_mode:
             cmd.extend(["--permission-mode", self._permission_mode])
@@ -231,6 +234,8 @@ class ClaudeCodeBridge:
                 )
             if resp.status_code == 401:
                 return CCResponse(error="Bridge auth failed. Check CC_BRIDGE_TOKEN.")
+            if not resp.is_success:
+                return CCResponse(error=f"Bridge returned HTTP {resp.status_code}")
             data = resp.json()
         except httpx.ConnectError:
             return CCResponse(error="Cannot connect to Claude Code bridge. Is the bridge server running?")
@@ -322,7 +327,7 @@ class ClaudeCodeBridge:
             if proc.returncode == 0:
                 return True, stdout.decode().strip()
             return False, stderr.decode().strip()
-        except FileNotFoundError:
+        except (FileNotFoundError, TimeoutError):
             return False, "claude CLI not found in PATH"
         except Exception as e:
             return False, str(e)
@@ -345,7 +350,8 @@ class ClaudeCodeBridge:
                 continue
 
         if not parsed_lines:
-            return CCResponse(events=[TextEvent(text=raw)])
+            sanitized = raw[:2000]
+            return CCResponse(error=sanitized)
 
         # If only one object, fall back to legacy single-JSON handling
         if len(parsed_lines) == 1:
@@ -588,7 +594,6 @@ class ClaudeCodeBridge:
         timestamp = None
         message_count = 0
         git_branch = ""
-        cwd = ""
 
         try:
             with open(jsonl_path) as f:
@@ -601,8 +606,6 @@ class ClaudeCodeBridge:
                     except json.JSONDecodeError:
                         continue
 
-                    if not cwd:
-                        cwd = data.get("cwd", "")
                     if not git_branch:
                         git_branch = data.get("gitBranch", "")
 
@@ -644,5 +647,4 @@ class ClaudeCodeBridge:
             timestamp=timestamp,
             message_count=message_count,
             git_branch=git_branch,
-            cwd=cwd,
         )

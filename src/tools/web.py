@@ -26,21 +26,21 @@ def init_web_tools(config: WebConfig) -> None:
 
 
 @tool
-def web_search(query: str, max_results: int = 5) -> str:
+async def web_search(query: str, max_results: int = 5) -> str:
     """Search the web for information. Returns a summary of search results."""
     if _brave_api_key:
-        return _brave_search(query, max_results)
-    return _ddg_search(query, max_results)
+        return await _brave_search(query, max_results)
+    return await _ddg_search(query, max_results)
 
 
-def _brave_search(query: str, max_results: int) -> str:
+async def _brave_search(query: str, max_results: int) -> str:
     """Search via Brave Search API."""
-    resp = httpx.get(
-        "https://api.search.brave.com/res/v1/web/search",
-        params={"q": query, "count": max_results},
-        headers={"X-Subscription-Token": _brave_api_key},
-        timeout=15,
-    )
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params={"q": query, "count": max_results},
+            headers={"X-Subscription-Token": _brave_api_key},
+        )
     resp.raise_for_status()
     data = resp.json()
     results = []
@@ -49,14 +49,14 @@ def _brave_search(query: str, max_results: int) -> str:
     return "\n\n---\n\n".join(results) if results else "No results found."
 
 
-def _ddg_search(query: str, max_results: int) -> str:
+async def _ddg_search(query: str, max_results: int) -> str:
     """Search via DuckDuckGo HTML (no API key needed)."""
-    resp = httpx.get(
-        "https://html.duckduckgo.com/html/",
-        params={"q": query},
-        headers={"User-Agent": "CianaParrot/0.1"},
-        timeout=15,
-    )
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={"User-Agent": "CianaParrot/0.1"},
+        )
     resp.raise_for_status()
     # Parse simple results from DDG HTML
     from html.parser import HTMLParser
@@ -104,15 +104,15 @@ def _ddg_search(query: str, max_results: int) -> str:
 
 
 @tool
-def web_fetch(url: str) -> str:
+async def web_fetch(url: str) -> str:
     """Fetch a URL and return its content as clean markdown."""
     try:
-        resp = httpx.get(
-            url,
-            timeout=_fetch_timeout,
-            follow_redirects=True,
-            headers={"User-Agent": "CianaParrot/0.1"},
-        )
+        async with httpx.AsyncClient(timeout=_fetch_timeout) as client:
+            resp = await client.get(
+                url,
+                follow_redirects=True,
+                headers={"User-Agent": "CianaParrot/0.1"},
+            )
         resp.raise_for_status()
         content_type = resp.headers.get("content-type", "")
         if "html" in content_type:

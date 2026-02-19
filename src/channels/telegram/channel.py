@@ -63,7 +63,6 @@ class TelegramChannel(AbstractChannel):
 
     def __init__(self, config: TelegramChannelConfig):
         self._token = config.token
-        self._trigger = config.trigger
         self._app: Application | None = None
         self._callback = None
         self._seen_updates: set[int] = set()
@@ -259,8 +258,8 @@ class TelegramChannel(AbstractChannel):
             return
         self._seen_updates.add(uid)
         if len(self._seen_updates) > MAX_SEEN_UPDATES:
-            to_keep = sorted(self._seen_updates)[MAX_SEEN_UPDATES // 2:]
-            self._seen_updates = set(to_keep)
+            cutoff = max(self._seen_updates) - MAX_SEEN_UPDATES // 2
+            self._seen_updates = {u for u in self._seen_updates if u >= cutoff}
 
         chat = update.effective_chat
         user = update.effective_user
