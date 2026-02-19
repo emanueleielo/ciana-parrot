@@ -138,18 +138,13 @@ class ClaudeCodeHandler:
 
     async def _send_response(self, chat_id: int, str_chat_id: str,
                              compact: str, keyboard, inline_markup) -> None:
-        """Send response with reply keyboard; attach tool-details button as reply."""
-        result = await self._send(str_chat_id, compact, reply_markup=keyboard)
-        if inline_markup and result:
-            try:
-                await self._app.bot.send_message(
-                    chat_id=chat_id,
-                    text="\U0001f4cb",
-                    reply_markup=inline_markup,
-                    reply_to_message_id=int(result.message_id),
-                )
-            except Exception:
-                logger.debug("Failed to send tool-details button", exc_info=True)
+        """Send response with reply keyboard or inline tool-details button.
+
+        Inline markup takes priority — the persistent reply keyboard stays
+        regardless, so we can attach the inline button directly to the message.
+        """
+        markup = inline_markup if inline_markup else keyboard
+        await self._send(str_chat_id, compact, reply_markup=markup)
 
     async def _process_message_locked(self, user_id: str, text: str, chat_id: int) -> None:
         str_chat_id = str(chat_id)

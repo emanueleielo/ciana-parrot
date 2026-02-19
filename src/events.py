@@ -34,10 +34,11 @@ class TextEvent:
 
 def summarize_tool_input(tool_name: str, input_data: dict) -> str:
     """Create a compact one-line summary of tool input for display."""
-    if tool_name in ("Read", "Write", "NotebookEdit", "Edit"):
-        fp = input_data.get("file_path", "")
+    if tool_name in ("Read", "Write", "NotebookEdit", "Edit",
+                      "read_file", "write_file", "edit_file"):
+        fp = input_data.get("file_path") or input_data.get("path", "")
         return fp.rsplit("/", 1)[-1] if fp else ""
-    if tool_name in ("Glob", "Grep"):
+    if tool_name in ("Glob", "Grep", "glob", "grep"):
         return input_data.get("pattern", "")[:60]
     if tool_name == "Bash":
         cmd = input_data.get("command", "")

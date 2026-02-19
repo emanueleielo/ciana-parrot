@@ -338,19 +338,9 @@ class TelegramChannel(AbstractChannel):
                         callback_data=f"td:tools:{key}"),
                 ]])
 
-            result = await self.send(str_chat_id, compact,
-                                     reply_to_message_id=msg.message_id)
-
-            if inline_markup and result:
-                try:
-                    await self._app.bot.send_message(
-                        chat_id=chat_id,
-                        text="\U0001f4cb",
-                        reply_markup=inline_markup,
-                        reply_to_message_id=int(result.message_id),
-                    )
-                except Exception:
-                    logger.debug("Failed to send tool-details button", exc_info=True)
+            await self.send(str_chat_id, compact,
+                            reply_to_message_id=msg.message_id,
+                            reply_markup=inline_markup)
 
         except Exception as e:
             logger.exception("Error processing message from %s", msg.user_id)
