@@ -36,24 +36,6 @@ class TestJsonStore:
         result["c"] = 3
         assert store.get("c") is None
 
-    def test_update(self, tmp_path):
-        store = JsonStore(tmp_path / "store.json")
-        store.set("a", 1)
-        store.update({"b": 2, "c": 3})
-        assert store.get("a") == 1
-        assert store.get("b") == 2
-        assert store.get("c") == 3
-
-    def test_clear(self, tmp_path):
-        store = JsonStore(tmp_path / "store.json")
-        store.set("k", "v")
-        store.clear()
-        assert store.all() == {}
-
-    def test_clear_empty(self, tmp_path):
-        store = JsonStore(tmp_path / "store.json")
-        store.clear()  # should not raise
-
     def test_persistence(self, tmp_path):
         path = tmp_path / "store.json"
         store1 = JsonStore(path)

@@ -19,8 +19,18 @@ def extract_agent_response(result: dict) -> AgentResponse:
     Returns:
         AgentResponse with text and tool_calls extracted.
     """
-    messages = result["messages"]
-    text = messages[-1].content
+    messages = result.get("messages", [])
+    if not messages:
+        return AgentResponse(text="")
+
+    content = messages[-1].content
+    if isinstance(content, list):
+        text = " ".join(
+            block.get("text", "") for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    else:
+        text = content
 
     tool_calls = []
     for msg in messages:

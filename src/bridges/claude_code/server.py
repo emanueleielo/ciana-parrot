@@ -27,7 +27,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            self._respond(200, {"status": "ok", "claude": self._claude_version()})
+            self._respond(200, {"status": "ok"})
         else:
             self._respond(404, {"error": "not found"})
 
@@ -76,10 +76,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
     # --- Helpers ---
 
     def _check_auth(self) -> bool:
+        import hmac
         if not TOKEN:
             return True
         auth = self.headers.get("Authorization", "")
-        if auth == f"Bearer {TOKEN}":
+        expected = f"Bearer {TOKEN}"
+        if hmac.compare_digest(auth, expected):
             return True
         self._respond(401, {"error": "unauthorized"})
         return False

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class JsonStore:
-    """Thread-safe JSON file store for persisting small state across restarts.
+    """JSON file store for persisting small state across restarts.
 
     Usage:
         store = JsonStore("data/my_state.json")
@@ -36,16 +36,6 @@ class JsonStore:
 
     def all(self) -> dict[str, Any]:
         return dict(self._data)
-
-    def update(self, data: dict[str, Any]) -> None:
-        """Merge multiple keys and save once."""
-        self._data.update(data)
-        self._save()
-
-    def clear(self) -> None:
-        if self._data:
-            self._data.clear()
-            self._save()
 
     def _load(self) -> dict:
         try:

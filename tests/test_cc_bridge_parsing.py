@@ -238,5 +238,4 @@ class TestParseNdjsonResponse:
     def test_plain_text_fallback(self, bridge):
         raw = "Just plain text output"
         resp = bridge._parse_cc_json_response(raw)
-        assert len(resp.events) == 1
-        assert resp.events[0].text == raw
+        assert resp.error == raw

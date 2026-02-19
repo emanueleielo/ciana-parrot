@@ -24,18 +24,21 @@ _current_channel: ContextVar[str | None] = ContextVar("_current_channel", defaul
 _current_chat_id: ContextVar[str | None] = ContextVar("_current_chat_id", default=None)
 
 # Shared lock for read-modify-write on the tasks JSON file
-_tasks_lock = asyncio.Lock()
+_tasks_lock: asyncio.Lock | None = None
 
 
 def get_tasks_lock() -> asyncio.Lock:
     """Return the shared lock for task file operations."""
+    if _tasks_lock is None:
+        raise RuntimeError("cron tools not initialized — call init_cron_tools() first")
     return _tasks_lock
 
 
 def init_cron_tools(config: SchedulerConfig) -> None:
     """Initialize cron tools with config."""
-    global _data_file
+    global _data_file, _tasks_lock
     _data_file = config.data_file
+    _tasks_lock = asyncio.Lock()
 
 
 def set_current_context(channel: str, chat_id: str) -> None:

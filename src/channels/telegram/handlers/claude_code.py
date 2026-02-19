@@ -3,7 +3,7 @@
 import asyncio
 import html
 import logging
-import re
+
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -219,7 +219,7 @@ class ClaudeCodeHandler:
                     reply_to_message_id=int(result.message_id),
                 )
             except Exception:
-                pass
+                logger.debug("Failed to send tool-details button", exc_info=True)
 
     async def _process_message_locked(self, user_id: str, text: str, chat_id: int) -> None:
         str_chat_id = str(chat_id)
@@ -234,6 +234,7 @@ class ClaudeCodeHandler:
                 reply_markup=keyboard,
             )
         except Exception:
+            logger.debug("Failed to send placeholder message", exc_info=True)
             placeholder = None
 
         try:

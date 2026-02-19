@@ -26,6 +26,7 @@ class Scheduler:
         self._channels = channels or {}  # name -> channel instance
         self._running = False
         self._task: asyncio.Task | None = None
+        self._running_tasks: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         """Start the scheduler loop."""
@@ -42,6 +43,9 @@ class Scheduler:
                 await self._task
             except asyncio.CancelledError:
                 pass
+        if self._running_tasks:
+            logger.info("Draining %d running task(s)…", len(self._running_tasks))
+            await asyncio.gather(*self._running_tasks, return_exceptions=True)
         logger.info("Scheduler stopped")
 
     async def _loop(self) -> None:
@@ -92,7 +96,9 @@ class Scheduler:
         # Execute due tasks in parallel, outside the lock
         for task in due_tasks:
             logger.info("Running scheduled task: %s", task["id"])
-            asyncio.create_task(self._execute_task(task))
+            t = asyncio.create_task(self._execute_task(task))
+            self._running_tasks.add(t)
+            t.add_done_callback(self._running_tasks.discard)
 
     def _is_due(self, task: dict, now: datetime) -> bool:
         """Check if a task is due to run."""
