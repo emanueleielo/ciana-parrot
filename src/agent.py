@@ -49,12 +49,12 @@ async def create_cianaparrot_agent(config: AppConfig):
     Path(workspace).mkdir(parents=True, exist_ok=True)
     Path(workspace, "sessions").mkdir(parents=True, exist_ok=True)
 
-    # Memory files
+    # Memory files (paths relative to workspace, resolved by FilesystemBackend)
     memory_files = []
     for fname in ["IDENTITY.md", "AGENT.md", "MEMORY.md"]:
         fpath = Path(workspace, fname)
         if fpath.exists():
-            memory_files.append(str(fpath))
+            memory_files.append(fname)
             logger.info("Memory file loaded: %s", fpath)
 
     # Skills directory

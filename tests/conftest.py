@@ -53,7 +53,7 @@ def app_config(tmp_path) -> AppConfig:
 def mock_agent() -> AsyncMock:
     """Mock agent.ainvoke() returning simple text response."""
     agent = AsyncMock()
-    mock_msg = MagicMock(content="Test response", tool_calls=[])
+    mock_msg = MagicMock(type="ai", content="Test response", tool_calls=[])
     agent.ainvoke.return_value = {"messages": [mock_msg]}
     return agent
 

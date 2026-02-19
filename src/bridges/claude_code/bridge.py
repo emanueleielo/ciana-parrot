@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,34 +13,16 @@ from typing import Optional
 import httpx
 
 from ...config import AppConfig
+from ...events import (
+    TextEvent,
+    ThinkingEvent,
+    ToolCallEvent,
+    extract_tool_result_text,
+    summarize_tool_input,
+)
 from ...store import JsonStore
-from ...utils import TOOL_RESULT_MAX_CHARS
 
 logger = logging.getLogger(__name__)
-
-
-# --- Structured event types ---
-
-@dataclass
-class ToolCallEvent:
-    """A single tool invocation with its result."""
-    tool_id: str
-    name: str
-    input_summary: str
-    result_text: str
-    is_error: bool
-
-
-@dataclass
-class ThinkingEvent:
-    """An extended-thinking block."""
-    text: str
-
-
-@dataclass
-class TextEvent:
-    """A plain text block from the assistant."""
-    text: str
 
 
 @dataclass
@@ -78,6 +61,21 @@ class UserSession:
     active_project: Optional[str] = None
     active_project_path: Optional[str] = None
     active_session_id: Optional[str] = None
+
+
+_CMD_MSG_RE = re.compile(r"<command-message>([\w/-]+)</command-message>")
+
+
+def _clean_preview(text: str) -> str:
+    """Clean raw JSONL user content into a readable conversation preview."""
+    m = _CMD_MSG_RE.match(text)
+    if m:
+        cmd = m.group(1)
+        args_m = re.search(r"<command-args>(.*?)</command-args>", text, re.DOTALL)
+        if args_m and args_m.group(1).strip():
+            return f"/{cmd} {args_m.group(1).strip()}"[:120]
+        return f"/{cmd}"
+    return text[:120]
 
 
 class ClaudeCodeBridge:
@@ -200,7 +198,6 @@ class ClaudeCodeBridge:
     # --- Private helpers ---
 
     def _build_command(self, text: str, state: UserSession) -> list[str]:
-        import re
         cmd = [self._claude_path, "-p"]
         if state.active_session_id:
             if not re.fullmatch(r"[a-zA-Z0-9_-]+", state.active_session_id):
@@ -417,7 +414,7 @@ class ClaudeCodeBridge:
                 continue
             if block.get("type") == "tool_use":
                 name = block.get("name", "unknown")
-                input_summary = self._summarize_tool_input(name, block.get("input", {}))
+                input_summary = summarize_tool_input(name, block.get("input", {}))
                 events.append(ToolCallEvent(
                     tool_id=block.get("id", ""),
                     name=name,
@@ -432,30 +429,6 @@ class ClaudeCodeBridge:
         if not events:
             return CCResponse(events=[TextEvent(text="(empty response)")])
         return CCResponse(events=events)
-
-    @staticmethod
-    def _summarize_tool_input(tool_name: str, input_data: dict) -> str:
-        """Create a compact one-line summary of tool input."""
-        if tool_name in ("Read", "Write", "NotebookEdit"):
-            fp = input_data.get("file_path", "")
-            return fp.rsplit("/", 1)[-1] if fp else ""
-        if tool_name == "Edit":
-            fp = input_data.get("file_path", "")
-            return fp.rsplit("/", 1)[-1] if fp else ""
-        if tool_name in ("Glob", "Grep"):
-            return input_data.get("pattern", "")[:60]
-        if tool_name == "Bash":
-            cmd = input_data.get("command", "")
-            return cmd[:70] + "..." if len(cmd) > 70 else cmd
-
-        for key in ("file_path", "command", "pattern", "query", "url"):
-            if key in input_data:
-                val = input_data[key]
-                return val[:70] + "..." if len(val) > 70 else val
-        for v in input_data.values():
-            if isinstance(v, str) and v:
-                return v[:60] + "..." if len(v) > 60 else v
-        return ""
 
     def _build_response(self, raw_events: list[dict]) -> CCResponse:
         """Pair tool_use/tool_result events and return structured CCResponse."""
@@ -475,13 +448,13 @@ class ClaudeCodeBridge:
             elif ev["kind"] == "tool_use":
                 tool_id = ev["id"]
                 name = ev["name"]
-                input_summary = self._summarize_tool_input(name, ev["input"])
+                input_summary = summarize_tool_input(name, ev["input"])
                 result_ev = results_by_id.get(tool_id)
 
                 if result_ev:
                     seen_result_ids.add(tool_id)
                     is_error = result_ev.get("is_error", False)
-                    result_text = self._extract_tool_result_text(result_ev["content"])
+                    result_text = extract_tool_result_text(result_ev["content"])
                 else:
                     is_error = False
                     result_text = ""
@@ -498,7 +471,7 @@ class ClaudeCodeBridge:
                 if ev["tool_use_id"] not in seen_result_ids:
                     seen_result_ids.add(ev["tool_use_id"])
                     if ev.get("is_error"):
-                        result_text = self._extract_tool_result_text(ev["content"])
+                        result_text = extract_tool_result_text(ev["content"])
                         events.append(ToolCallEvent(
                             tool_id=ev["tool_use_id"],
                             name="unknown",
@@ -513,32 +486,6 @@ class ClaudeCodeBridge:
         if not events:
             return CCResponse(events=[TextEvent(text="(empty response)")])
         return CCResponse(events=events)
-
-    @staticmethod
-    def _extract_tool_result_text(content) -> str:
-        """Normalize tool_result content (str, list, dict) into plain text."""
-        if content is None:
-            return ""
-        if isinstance(content, str):
-            return content.strip()
-        if isinstance(content, list):
-            texts = []
-            for item in content:
-                if isinstance(item, dict):
-                    if item.get("type") == "text":
-                        texts.append(item.get("text", ""))
-                    elif item.get("type") == "image":
-                        texts.append("[image]")
-                    else:
-                        texts.append(str(item))
-                elif isinstance(item, str):
-                    texts.append(item)
-            return "\n".join(texts).strip()
-        if isinstance(content, dict):
-            if content.get("type") == "text":
-                return content.get("text", "").strip()
-            return json.dumps(content, indent=2)[:TOOL_RESULT_MAX_CHARS]
-        return str(content).strip()
 
     def _restore_states(self) -> None:
         """Restore CC user states from persistent store."""
@@ -630,7 +577,7 @@ class ClaudeCodeBridge:
                                          if isinstance(b, dict) and b.get("type") == "text"]
                                 content = " ".join(texts)
                             if isinstance(content, str) and content.strip():
-                                first_message = content.strip()[:120]
+                                first_message = _clean_preview(content.strip())
 
         except OSError:
             return None

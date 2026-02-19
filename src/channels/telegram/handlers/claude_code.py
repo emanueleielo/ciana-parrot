@@ -22,14 +22,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from ....bridges.claude_code.bridge import (
-    CCResponse,
-    TextEvent,
-    ThinkingEvent,
-    ToolCallEvent,
-)
-from ....utils import truncate_text
+from ....bridges.claude_code.bridge import CCResponse
 from ..formatting import md_to_telegram_html, split_text, strip_html_tags, TELEGRAM_MAX_MESSAGE_LEN
+from ..rendering import render_events
 from ..utils import typing_indicator
 
 logger = logging.getLogger(__name__)
@@ -55,82 +50,17 @@ def _cc_reply_keyboard(project_name: str) -> ReplyKeyboardMarkup:
 _MAX_STORED_DETAILS = 50
 
 
-def _tool_detail_html(ev: ToolCallEvent) -> str:
-    """Render a single tool call as Telegram HTML for the details view."""
-    icon = "\u274c" if ev.is_error else "\u2022"
-    name_esc = html.escape(ev.name)
-    summary_esc = f" {html.escape(ev.input_summary)}" if ev.input_summary else ""
-    header = f"{icon} <b>{name_esc}</b>{summary_esc}"
-    if ev.result_text:
-        truncated = truncate_text(ev.result_text, max_chars=2500, max_lines=25)
-        return f"{header}\n<pre>{html.escape(truncated)}</pre>"
-    return f"{header} \u2714"
-
-
-def _thinking_detail_html(ev: ThinkingEvent) -> str:
-    """Render a thinking block as Telegram HTML for the details view."""
-    lines = ev.text.splitlines()[:15]
-    truncated = "\n".join(lines)
-    if len(truncated) > 1500:
-        truncated = truncated[:1500]
-    return f"\U0001f4ad <b>Thinking</b>\n<blockquote>{html.escape(truncated)}</blockquote>"
-
-
 def _render_cc_response(cc_resp: CCResponse) -> tuple[str, list[str]]:
     """Render a CCResponse into (compact_text, tool_detail_items).
 
-    compact_text: main message with tool one-liners, thinking, and text.
-    tool_detail_items: list of pre-formatted HTML strings, one per event.
+    Delegates to the shared render_events(), with CC-specific error prefix.
     """
     if cc_resp.error:
         if "\n" in cc_resp.error:
             return f"Claude Code error:\n```\n{cc_resp.error}\n```", []
         return f"Claude Code error: {cc_resp.error}", []
 
-    # Separate events by kind for rendering
-    parts: list[str] = []
-    tool_lines: list[str] = []
-
-    def flush_tools():
-        if tool_lines:
-            parts.append("\n".join(tool_lines))
-            tool_lines.clear()
-
-    for ev in cc_resp.events:
-        if isinstance(ev, ThinkingEvent):
-            flush_tools()
-            quoted = "\n".join(f"> {l}" for l in ev.text.splitlines()[:15])
-            parts.append(f"**Thinking**\n{quoted}")
-
-        elif isinstance(ev, ToolCallEvent):
-            summary_str = f" {ev.input_summary}" if ev.input_summary else ""
-            if ev.is_error and ev.result_text:
-                icon = "\u274c"
-                line = f"{icon} **{ev.name}**{summary_str}"
-                truncated = truncate_text(ev.result_text, max_lines=8)
-                flush_tools()
-                parts.append(f"{line}\n```\n{truncated}\n```")
-            else:
-                icon = "\u274c" if ev.is_error else "\u2022"
-                line = f"{icon} **{ev.name}**{summary_str}"
-                tool_lines.append(line)
-
-        elif isinstance(ev, TextEvent):
-            flush_tools()
-            parts.append(ev.text)
-
-    flush_tools()
-
-    # Build per-event HTML details (one message per tool/thinking)
-    detail_items: list[str] = []
-    for ev in cc_resp.events:
-        if isinstance(ev, ToolCallEvent):
-            detail_items.append(_tool_detail_html(ev))
-        elif isinstance(ev, ThinkingEvent):
-            detail_items.append(_thinking_detail_html(ev))
-
-    compact = "\n\n".join(parts) if parts else "(empty response)"
-    return compact, detail_items
+    return render_events(cc_resp.events)
 
 
 class ClaudeCodeHandler:
@@ -387,7 +317,7 @@ class ClaudeCodeHandler:
     # --- List views ---
 
     async def _send_list_view(self, text: str, markup: InlineKeyboardMarkup, *,
-                               message=None, chat_id: int = None,
+                               message=None, chat_id: Optional[int] = None,
                                edit: bool = False) -> None:
         """Send a list view via edit, reply, or new message."""
         if message and edit:
@@ -400,7 +330,7 @@ class ClaudeCodeHandler:
                 parse_mode="HTML", reply_markup=markup)
 
     async def _show_project_list(self, user_id: str, page: int = 0, *,
-                                  message=None, chat_id: int = None,
+                                  message=None, chat_id: Optional[int] = None,
                                   edit: bool = False) -> None:
         projects = self._bridge.list_projects()
         self._projects_cache[user_id] = projects
@@ -415,15 +345,16 @@ class ClaudeCodeHandler:
         start = page * CC_PAGE_SIZE
         page_projects = projects[start:start + CC_PAGE_SIZE]
 
-        lines = ["\U0001f4c2 <b>Projects</b>\n"]
+        text = "\U0001f4c2 <b>Projects</b>"
         buttons = []
         for i, proj in enumerate(page_projects):
             idx = start + i
             rel = _relative_time(proj.last_activity)
-            lines.append(f"<b>{html.escape(proj.display_name)}</b>"
-                         f" \u2014 {proj.conversation_count} conv \u00b7 {rel}")
+            btn_label = f"{proj.display_name} \u00b7 {proj.conversation_count} conv \u00b7 {rel}"
+            if len(btn_label) > 60:
+                btn_label = btn_label[:57] + "\u2026"
             buttons.append([InlineKeyboardButton(
-                f"\U0001f4c1 {proj.display_name} \u00b7 {proj.conversation_count}",
+                btn_label,
                 callback_data=f"cc:proj:{idx}",
             )])
 
@@ -431,14 +362,13 @@ class ClaudeCodeHandler:
         if nav:
             buttons.append(nav)
 
-        text = "\n".join(lines)
         markup = InlineKeyboardMarkup(buttons)
         await self._send_list_view(
             text, markup, message=message, chat_id=chat_id, edit=edit)
 
     async def _show_conversation_list(self, user_id: str, proj_idx: int,
                                        page: int = 0, *, message=None,
-                                       chat_id: int = None,
+                                       chat_id: Optional[int] = None,
                                        edit: bool = False) -> None:
         projects = self._projects_cache.get(user_id, [])
 
@@ -456,18 +386,16 @@ class ClaudeCodeHandler:
         start = page * CC_PAGE_SIZE
         page_convs = conversations[start:start + CC_PAGE_SIZE]
 
-        lines = [f"\U0001f4c1 <b>{html.escape(project.display_name)}</b>\n"]
+        text = f"\U0001f4c1 <b>{html.escape(project.display_name)}</b>"
         buttons = []
         for i, conv in enumerate(page_convs):
             conv_idx = start + i
-            preview = conv.first_message[:40] + "\u2026" if len(conv.first_message) > 40 else conv.first_message
+            preview = conv.first_message[:35] + "\u2026" if len(conv.first_message) > 35 else conv.first_message
             rel = _relative_time(conv.timestamp)
             branch_tag = f" [{conv.git_branch}]" if conv.git_branch else ""
-            lines.append(f"{html.escape(preview)}"
-                         f" \u00b7 {conv.message_count} msg \u00b7 {rel}{branch_tag}")
-            btn_label = f"\U0001f4ac {preview}"
-            if len(btn_label) > 55:
-                btn_label = btn_label[:52] + "\u2026"
+            btn_label = f"{preview} \u00b7 {rel}{branch_tag}"
+            if len(btn_label) > 60:
+                btn_label = btn_label[:57] + "\u2026"
             buttons.append([InlineKeyboardButton(
                 btn_label,
                 callback_data=f"cc:conv:{proj_idx}:{conv_idx}",
@@ -482,7 +410,6 @@ class ClaudeCodeHandler:
         if nav:
             buttons.append(nav)
 
-        text = "\n".join(lines)
         markup = InlineKeyboardMarkup(buttons)
         await self._send_list_view(
             text, markup, message=message, chat_id=chat_id, edit=edit)
