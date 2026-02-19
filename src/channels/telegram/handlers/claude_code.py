@@ -37,18 +37,18 @@ logger = logging.getLogger(__name__)
 CC_PAGE_SIZE = 6
 
 # Button labels — imported by channel.py for intercept matching
-CC_BTN_EXIT = "\u2190 Back to Ciana"
-CC_BTN_STATUS_PREFIX = "\u26a1 "
+CC_BTN_EXIT = "\u2190 Exit CC"
+CC_BTN_CONVERSATIONS = "\U0001f4cb Conversations"
 
 
 def _cc_reply_keyboard(project_name: str) -> ReplyKeyboardMarkup:
     """Persistent reply keyboard shown while in CC mode."""
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(f"{CC_BTN_STATUS_PREFIX}{project_name}"),
+        [[KeyboardButton(CC_BTN_CONVERSATIONS),
           KeyboardButton(CC_BTN_EXIT)]],
         resize_keyboard=True,
         is_persistent=True,
-        input_field_placeholder="Message to Claude Code...",
+        input_field_placeholder=f"Message Claude Code ({project_name})...",
     )
 
 
@@ -172,13 +172,13 @@ class ClaudeCodeHandler:
     def match_button(self, text: str) -> str | None:
         """Check if text matches a CC reply keyboard button.
 
-        Returns "exit", "status", or None.
+        Returns "exit", "conversations", or None.
         """
         stripped = text.strip()
         if stripped == CC_BTN_EXIT:
             return "exit"
-        if stripped.startswith(CC_BTN_STATUS_PREFIX):
-            return "status"
+        if stripped == CC_BTN_CONVERSATIONS:
+            return "conversations"
         return None
 
     def _get_project_display_name(self, user_id: str) -> str:
@@ -316,8 +316,8 @@ class ClaudeCodeHandler:
             reply_markup=ReplyKeyboardRemove(),
         )
 
-    async def show_status(self, user_id: str, chat_id: str) -> None:
-        """Show CC mode status with persistent keyboard."""
+    async def show_menu(self, user_id: str, chat_id: str) -> None:
+        """Show conversation list for the active project (reply keyboard action)."""
         if not self._bridge.is_claude_code_mode(user_id):
             await self._send(
                 chat_id,
@@ -327,14 +327,20 @@ class ClaudeCodeHandler:
             return
 
         state = self._bridge.get_user_state(user_id)
-        project_name = self._get_project_display_name(user_id)
-        await self._send(
-            chat_id,
-            f"**Claude Code mode active**\n"
-            f"Project: `{html.escape(state.active_project_path or 'unknown')}`\n"
-            f"Session: `{(state.active_session_id or 'new')[:8]}...`",
-            reply_markup=_cc_reply_keyboard(project_name),
+        projects = self._bridge.list_projects()
+        self._projects_cache[user_id] = projects
+
+        proj_idx = next(
+            (i for i, p in enumerate(projects)
+             if p.encoded_name == state.active_project),
+            None,
         )
+        if proj_idx is None:
+            await self._send(chat_id, "Project not found. Use /cc to select one.")
+            return
+
+        await self._show_conversation_list(
+            user_id=user_id, proj_idx=proj_idx, chat_id=int(chat_id))
 
     # --- Command handler ---
 
@@ -361,50 +367,62 @@ class ClaudeCodeHandler:
                 await update.message.reply_text("You're not in Claude Code mode.")
             return
 
-        # If already in mode, show status
+        # If already in mode, show status with navigation
         if self._bridge.is_claude_code_mode(user_id):
             state = self._bridge.get_user_state(user_id)
             project_name = self._get_project_display_name(user_id)
             await update.message.reply_text(
                 f"<b>Claude Code mode active</b>\n"
-                f"Project: <code>{state.active_project_path or 'unknown'}</code>\n"
+                f"Project: <code>{html.escape(state.active_project_path or 'unknown')}</code>\n"
                 f"Session: <code>{(state.active_session_id or 'new')[:8]}...</code>",
                 parse_mode="HTML",
-                reply_markup=_cc_reply_keyboard(project_name),
+                reply_markup=_cc_status_buttons(),
             )
             return
 
         # Show project list
-        await self._show_project_list(update.message, user_id)
+        await self._show_project_list(user_id, message=update.message)
 
     # --- List views ---
 
-    async def _show_project_list(self, message, user_id: str, page: int = 0,
+    async def _send_list_view(self, text: str, markup: InlineKeyboardMarkup, *,
+                               message=None, chat_id: int = None,
+                               edit: bool = False) -> None:
+        """Send a list view via edit, reply, or new message."""
+        if message and edit:
+            await message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+        elif message:
+            await message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+        elif chat_id:
+            await self._app.bot.send_message(
+                chat_id=chat_id, text=text,
+                parse_mode="HTML", reply_markup=markup)
+
+    async def _show_project_list(self, user_id: str, page: int = 0, *,
+                                  message=None, chat_id: int = None,
                                   edit: bool = False) -> None:
         projects = self._bridge.list_projects()
         self._projects_cache[user_id] = projects
 
         if not projects:
-            text = "No Claude Code projects found."
-            if edit:
-                await message.edit_text(text)
-            else:
-                await message.reply_text(text)
+            await self._send_list_view(
+                "No Claude Code projects found.", InlineKeyboardMarkup([]),
+                message=message, chat_id=chat_id, edit=edit)
             return
 
         total_pages = (len(projects) + CC_PAGE_SIZE - 1) // CC_PAGE_SIZE
         start = page * CC_PAGE_SIZE
         page_projects = projects[start:start + CC_PAGE_SIZE]
 
-        lines = ["<b>Claude Code Projects</b>\n"]
+        lines = ["\U0001f4c2 <b>Projects</b>\n"]
         buttons = []
         for i, proj in enumerate(page_projects):
             idx = start + i
             rel = _relative_time(proj.last_activity)
-            lines.append(f"{idx + 1}. <b>{html.escape(proj.display_name)}</b>"
-                         f" — {proj.conversation_count} conv · {rel}")
+            lines.append(f"<b>{html.escape(proj.display_name)}</b>"
+                         f" \u2014 {proj.conversation_count} conv \u00b7 {rel}")
             buttons.append([InlineKeyboardButton(
-                f"{proj.display_name} ({proj.conversation_count})",
+                f"\U0001f4c1 {proj.display_name} \u00b7 {proj.conversation_count}",
                 callback_data=f"cc:proj:{idx}",
             )])
 
@@ -414,21 +432,19 @@ class ClaudeCodeHandler:
 
         text = "\n".join(lines)
         markup = InlineKeyboardMarkup(buttons)
-        if edit:
-            await message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-        else:
-            await message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+        await self._send_list_view(
+            text, markup, message=message, chat_id=chat_id, edit=edit)
 
-    async def _show_conversation_list(self, message, user_id: str, proj_idx: int,
-                                       page: int = 0, edit: bool = False) -> None:
+    async def _show_conversation_list(self, user_id: str, proj_idx: int,
+                                       page: int = 0, *, message=None,
+                                       chat_id: int = None,
+                                       edit: bool = False) -> None:
         projects = self._projects_cache.get(user_id, [])
 
         if proj_idx >= len(projects):
-            text = "Project cache expired. Try /cc again."
-            if edit:
-                await message.edit_text(text)
-            else:
-                await message.reply_text(text)
+            await self._send_list_view(
+                "Project cache expired. Try /cc again.", InlineKeyboardMarkup([]),
+                message=message, chat_id=chat_id, edit=edit)
             return
 
         project = projects[proj_idx]
@@ -439,23 +455,26 @@ class ClaudeCodeHandler:
         start = page * CC_PAGE_SIZE
         page_convs = conversations[start:start + CC_PAGE_SIZE]
 
-        lines = [f"<b>{html.escape(project.display_name)}</b> — conversations\n"]
+        lines = [f"\U0001f4c1 <b>{html.escape(project.display_name)}</b>\n"]
         buttons = []
         for i, conv in enumerate(page_convs):
             conv_idx = start + i
-            preview = conv.first_message[:50] + "..." if len(conv.first_message) > 50 else conv.first_message
+            preview = conv.first_message[:40] + "\u2026" if len(conv.first_message) > 40 else conv.first_message
             rel = _relative_time(conv.timestamp)
             branch_tag = f" [{conv.git_branch}]" if conv.git_branch else ""
-            lines.append(f"{conv_idx + 1}. {html.escape(preview)}"
-                         f" · {conv.message_count} msg · {rel}{branch_tag}")
+            lines.append(f"{html.escape(preview)}"
+                         f" \u00b7 {conv.message_count} msg \u00b7 {rel}{branch_tag}")
+            btn_label = f"\U0001f4ac {preview}"
+            if len(btn_label) > 55:
+                btn_label = btn_label[:52] + "\u2026"
             buttons.append([InlineKeyboardButton(
-                f"{preview} ({conv.message_count} msg)",
+                btn_label,
                 callback_data=f"cc:conv:{proj_idx}:{conv_idx}",
             )])
 
         buttons.append([
-            InlineKeyboardButton("+ New", callback_data=f"cc:new:{proj_idx}"),
-            InlineKeyboardButton("<< Back", callback_data="cc:projects:0"),
+            InlineKeyboardButton("\u2795 New session", callback_data=f"cc:new:{proj_idx}"),
+            InlineKeyboardButton("\u2b05\ufe0f Projects", callback_data="cc:projects:0"),
         ])
 
         nav = _pagination_row(f"cc:cpage:{proj_idx}", page, total_pages)
@@ -464,10 +483,8 @@ class ClaudeCodeHandler:
 
         text = "\n".join(lines)
         markup = InlineKeyboardMarkup(buttons)
-        if edit:
-            await message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-        else:
-            await message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+        await self._send_list_view(
+            text, markup, message=message, chat_id=chat_id, edit=edit)
 
     # --- Callback router ---
 
@@ -482,13 +499,15 @@ class ClaudeCodeHandler:
 
             if data.startswith("cc:projects:"):
                 await query.answer("Loading projects\u2026")
-                await self._show_project_list(query.message, user_id,
-                                              page=int(parts[2]), edit=True)
+                await self._show_project_list(
+                    user_id, page=int(parts[2]),
+                    message=query.message, edit=True)
 
             elif data.startswith("cc:proj:"):
                 await query.answer("Loading conversations\u2026")
-                await self._show_conversation_list(query.message, user_id,
-                                                   proj_idx=int(parts[2]), edit=True)
+                await self._show_conversation_list(
+                    user_id, proj_idx=int(parts[2]),
+                    message=query.message, edit=True)
 
             elif data.startswith("cc:conv:"):
                 await query.answer("Activating session\u2026")
@@ -497,9 +516,9 @@ class ClaudeCodeHandler:
 
             elif data.startswith("cc:cpage:"):
                 await query.answer()
-                await self._show_conversation_list(query.message, user_id,
-                                                   proj_idx=int(parts[2]),
-                                                   page=int(parts[3]), edit=True)
+                await self._show_conversation_list(
+                    user_id, proj_idx=int(parts[2]),
+                    page=int(parts[3]), message=query.message, edit=True)
 
             elif data.startswith("cc:new:"):
                 await query.answer("Starting new conversation\u2026")
@@ -568,6 +587,24 @@ class ClaudeCodeHandler:
                         pass
                 else:
                     await query.answer()
+
+            elif data == "cc:convs_menu":
+                await query.answer("Loading conversations\u2026")
+                state = self._bridge.get_user_state(user_id)
+                projects = self._bridge.list_projects()
+                self._projects_cache[user_id] = projects
+                proj_idx = next(
+                    (i for i, p in enumerate(projects)
+                     if p.encoded_name == state.active_project),
+                    None,
+                )
+                if proj_idx is not None:
+                    await self._show_conversation_list(
+                        user_id, proj_idx=proj_idx,
+                        message=query.message, edit=True)
+                else:
+                    await self._show_project_list(
+                        user_id, message=query.message, edit=True)
 
             elif data == "cc:exit":
                 await query.answer("Exiting Claude Code mode")
@@ -654,17 +691,25 @@ class ClaudeCodeHandler:
 
 def _cc_mode_buttons() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("Switch Project", callback_data="cc:projects:0"),
-        InlineKeyboardButton("Exit Mode", callback_data="cc:exit"),
+        InlineKeyboardButton("\U0001f504 Switch Project", callback_data="cc:projects:0"),
+        InlineKeyboardButton("\u274c Exit CC", callback_data="cc:exit"),
+    ]])
+
+
+def _cc_status_buttons() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("\U0001f4ac Conversations", callback_data="cc:convs_menu"),
+        InlineKeyboardButton("\U0001f504 Switch Project", callback_data="cc:projects:0"),
+        InlineKeyboardButton("\u274c Exit", callback_data="cc:exit"),
     ]])
 
 
 def _pagination_row(prefix: str, page: int, total_pages: int) -> list[InlineKeyboardButton]:
     row = []
     if page > 0:
-        row.append(InlineKeyboardButton("<<", callback_data=f"{prefix}:{page - 1}"))
+        row.append(InlineKeyboardButton("\u2039 Prev", callback_data=f"{prefix}:{page - 1}"))
     if page < total_pages - 1:
-        row.append(InlineKeyboardButton(">>", callback_data=f"{prefix}:{page + 1}"))
+        row.append(InlineKeyboardButton("Next \u203a", callback_data=f"{prefix}:{page + 1}"))
     return row
 
 
