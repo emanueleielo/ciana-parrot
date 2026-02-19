@@ -3,6 +3,7 @@
 import asyncio
 import html
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -14,6 +15,7 @@ from telegram import (
     ReplyKeyboardRemove,
     Update,
 )
+from telegram.error import BadRequest
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
@@ -27,7 +29,7 @@ from ....bridges.claude_code.bridge import (
     ToolCallEvent,
 )
 from ....utils import truncate_text
-from ..formatting import md_to_telegram_html, split_text, TELEGRAM_MAX_MESSAGE_LEN
+from ..formatting import md_to_telegram_html, split_text, strip_html_tags, TELEGRAM_MAX_MESSAGE_LEN
 from ..utils import typing_indicator
 
 logger = logging.getLogger(__name__)
@@ -53,16 +55,37 @@ def _cc_reply_keyboard(project_name: str) -> ReplyKeyboardMarkup:
 _MAX_STORED_DETAILS = 50
 
 
-def _render_cc_response(cc_resp: CCResponse) -> tuple[str, str]:
-    """Render a CCResponse into (compact_text, tool_details_text).
+def _tool_detail_html(ev: ToolCallEvent) -> str:
+    """Render a single tool call as Telegram HTML for the details view."""
+    icon = "\u274c" if ev.is_error else "\u2022"
+    name_esc = html.escape(ev.name)
+    summary_esc = f" {html.escape(ev.input_summary)}" if ev.input_summary else ""
+    header = f"{icon} <b>{name_esc}</b>{summary_esc}"
+    if ev.result_text:
+        truncated = truncate_text(ev.result_text, max_chars=2500, max_lines=25)
+        return f"{header}\n<pre>{html.escape(truncated)}</pre>"
+    return f"{header} \u2714"
+
+
+def _thinking_detail_html(ev: ThinkingEvent) -> str:
+    """Render a thinking block as Telegram HTML for the details view."""
+    lines = ev.text.splitlines()[:15]
+    truncated = "\n".join(lines)
+    if len(truncated) > 1500:
+        truncated = truncated[:1500]
+    return f"\U0001f4ad <b>Thinking</b>\n<blockquote>{html.escape(truncated)}</blockquote>"
+
+
+def _render_cc_response(cc_resp: CCResponse) -> tuple[str, list[str]]:
+    """Render a CCResponse into (compact_text, tool_detail_items).
 
     compact_text: main message with tool one-liners, thinking, and text.
-    tool_details_text: expanded view with tool results for the inline button.
+    tool_detail_items: list of pre-formatted HTML strings, one per event.
     """
     if cc_resp.error:
         if "\n" in cc_resp.error:
-            return f"Claude Code error:\n```\n{cc_resp.error}\n```", ""
-        return f"Claude Code error: {cc_resp.error}", ""
+            return f"Claude Code error:\n```\n{cc_resp.error}\n```", []
+        return f"Claude Code error: {cc_resp.error}", []
 
     # Separate events by kind for rendering
     parts: list[str] = []
@@ -98,25 +121,16 @@ def _render_cc_response(cc_resp: CCResponse) -> tuple[str, str]:
 
     flush_tools()
 
-    # Build expanded tool details
-    tool_detail_parts: list[str] = []
+    # Build per-event HTML details (one message per tool/thinking)
+    detail_items: list[str] = []
     for ev in cc_resp.events:
-        if not isinstance(ev, ToolCallEvent):
-            continue
-        summary_str = f" {ev.input_summary}" if ev.input_summary else ""
-        icon = "\u274c" if ev.is_error else "\u2022"
-        if ev.result_text:
-            truncated = truncate_text(ev.result_text, max_chars=3000, max_lines=25)
-            tool_detail_parts.append(
-                f"{icon} **{ev.name}**{summary_str}\n```\n{truncated}\n```")
-        else:
-            tool_detail_parts.append(
-                f"{icon} **{ev.name}**{summary_str} \u2714")
+        if isinstance(ev, ToolCallEvent):
+            detail_items.append(_tool_detail_html(ev))
+        elif isinstance(ev, ThinkingEvent):
+            detail_items.append(_thinking_detail_html(ev))
 
     compact = "\n\n".join(parts) if parts else "(empty response)"
-    details = "\n\n".join(tool_detail_parts) if tool_detail_parts else ""
-
-    return compact, details
+    return compact, detail_items
 
 
 class ClaudeCodeHandler:
@@ -132,7 +146,7 @@ class ClaudeCodeHandler:
         self._app = app
         self._send = send_fn
         self._user_locks: dict[str, asyncio.Lock] = {}
-        self._tool_details: dict[str, dict] = {}  # key -> {"text": str, "msg_id": int|None}
+        self._tool_details: dict[str, dict] = {}  # key -> {"items": list[str], "msg_ids": list[int]}
         self._detail_counter = 0
         # Pagination caches (keyed by user_id)
         self._projects_cache: dict[str, list] = {}
@@ -180,11 +194,11 @@ class ClaudeCodeHandler:
         async with lock:
             await self._process_message_locked(user_id, text, chat_id)
 
-    def _store_tool_details(self, details: str) -> str:
-        """Store tool details and return the lookup key."""
+    def _store_tool_details(self, items: list[str]) -> str:
+        """Store tool detail items and return the lookup key."""
         self._detail_counter += 1
         key = str(self._detail_counter)
-        self._tool_details[key] = {"text": details, "msg_id": None}
+        self._tool_details[key] = {"items": items, "msg_ids": []}
         if len(self._tool_details) > _MAX_STORED_DETAILS:
             oldest = sorted(self._tool_details, key=int)[
                 :len(self._tool_details) - _MAX_STORED_DETAILS]
@@ -229,13 +243,13 @@ class ClaudeCodeHandler:
                     timeout=300,
                 )
 
-            compact, tool_details = _render_cc_response(cc_resp)
+            compact, tool_detail_items = _render_cc_response(cc_resp)
 
             if compact:
                 # Build inline button for tool details if available
                 inline_markup = None
-                if tool_details:
-                    key = self._store_tool_details(tool_details)
+                if tool_detail_items:
+                    key = self._store_tool_details(tool_detail_items)
                     inline_markup = InlineKeyboardMarkup([[
                         InlineKeyboardButton(
                             "\U0001f4cb Tool details",
@@ -495,15 +509,29 @@ class ClaudeCodeHandler:
             elif data.startswith("cc:tools:"):
                 key = parts[2]
                 entry = self._tool_details.get(key)
-                if entry:
+                if entry and entry.get("items"):
                     await query.answer()
-                    project_name = self._get_project_display_name(user_id)
-                    result = await self._send(
-                        str(query.message.chat_id), entry["text"],
-                        reply_to_message_id=str(query.message.message_id),
-                        reply_markup=_cc_reply_keyboard(project_name))
-                    if result:
-                        entry["msg_id"] = int(result.message_id)
+                    msg_ids = []
+                    for item_html in entry["items"]:
+                        try:
+                            msg = await self._app.bot.send_message(
+                                chat_id=query.message.chat_id,
+                                text=item_html,
+                                parse_mode="HTML",
+                                disable_notification=True,
+                            )
+                            msg_ids.append(msg.message_id)
+                        except BadRequest:
+                            try:
+                                msg = await self._app.bot.send_message(
+                                    chat_id=query.message.chat_id,
+                                    text=strip_html_tags(item_html),
+                                    disable_notification=True,
+                                )
+                                msg_ids.append(msg.message_id)
+                            except Exception:
+                                logger.warning("Failed to send tool detail")
+                    entry["msg_ids"] = msg_ids
                     try:
                         await query.message.edit_reply_markup(
                             reply_markup=InlineKeyboardMarkup([[
@@ -519,15 +547,16 @@ class ClaudeCodeHandler:
             elif data.startswith("cc:tclose:"):
                 key = parts[2]
                 entry = self._tool_details.get(key)
-                if entry and entry.get("msg_id"):
+                if entry and entry.get("msg_ids"):
                     await query.answer()
-                    try:
-                        await self._app.bot.delete_message(
-                            chat_id=query.message.chat_id,
-                            message_id=entry["msg_id"])
-                    except Exception:
-                        pass
-                    entry["msg_id"] = None
+                    for mid in entry["msg_ids"]:
+                        try:
+                            await self._app.bot.delete_message(
+                                chat_id=query.message.chat_id,
+                                message_id=mid)
+                        except Exception:
+                            pass
+                    entry["msg_ids"] = []
                     try:
                         await query.message.edit_reply_markup(
                             reply_markup=InlineKeyboardMarkup([[

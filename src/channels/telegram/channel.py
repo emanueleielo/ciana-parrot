@@ -18,7 +18,7 @@ from telegram.ext import (
 from ...agent_response import AgentResponse
 from ...config import TelegramChannelConfig
 from ..base import AbstractChannel, IncomingMessage, SendResult
-from .formatting import md_to_telegram_html, split_text, TELEGRAM_MAX_MESSAGE_LEN
+from .formatting import md_to_telegram_html, split_text, strip_html_tags, TELEGRAM_MAX_MESSAGE_LEN
 from .utils import typing_indicator
 
 logger = logging.getLogger(__name__)
@@ -170,6 +170,7 @@ class TelegramChannel(AbstractChannel):
                 last_msg = await self._app.bot.send_message(**kwargs)
             except telegram.error.BadRequest as e:
                 logger.warning("send_message BadRequest: %s", e)
+                kwargs["text"] = strip_html_tags(kwargs["text"])
                 kwargs.pop("parse_mode", None)
                 kwargs.pop("reply_to_message_id", None)
                 try:
