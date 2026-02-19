@@ -4,6 +4,7 @@
 # Data (runtime)
 data/allowed_users.json
 data/scheduled_tasks.json
+data/cc_user_states.json
 workspace/sessions/
 workspace/checkpoints.db*
 

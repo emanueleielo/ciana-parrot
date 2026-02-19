@@ -1,13 +1,16 @@
-"""Configuration loader - parses config.yaml with env var expansion."""
+"""Configuration loader - parses config.yaml with env var expansion and Pydantic validation."""
 
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
+from pydantic import BaseModel, Field, field_validator
 
 _ENV_RE = re.compile(r"\$\{([^}]+)\}")
+
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
 def _expand_env(value: str) -> str:
@@ -29,7 +32,130 @@ def _walk_expand(obj: Any) -> Any:
     return obj
 
 
-def load_config(path: str = "config.yaml") -> dict:
+# --- Pydantic models ---
+
+
+def _empty_str_to_none(v: Any) -> Optional[str]:
+    """Convert empty strings to None for optional string fields."""
+    if isinstance(v, str) and not v.strip():
+        return None
+    return v
+
+
+class AgentConfig(BaseModel):
+    workspace: str = "./workspace"
+    max_tool_iterations: int = 20
+
+
+class ProviderConfig(BaseModel):
+    name: str = "anthropic"
+    model: str = "claude-sonnet-4-6"
+    api_key: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    base_url: Optional[str] = None
+
+    @field_validator("api_key", "base_url", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Optional[str]:
+        return _empty_str_to_none(v)
+
+    @field_validator("temperature")
+    @classmethod
+    def _check_temperature(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (0.0 <= v <= 2.0):
+            raise ValueError("temperature must be between 0.0 and 2.0")
+        return v
+
+
+class TelegramChannelConfig(BaseModel):
+    enabled: bool = False
+    token: str = ""
+    trigger: str = "@Ciana"
+    allowed_users: list[str] = Field(default_factory=list)
+
+    @field_validator("allowed_users", mode="before")
+    @classmethod
+    def _coerce_to_str(cls, v: Any) -> list[str]:
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        return v
+
+
+class ChannelsConfig(BaseModel):
+    telegram: TelegramChannelConfig = Field(default_factory=TelegramChannelConfig)
+
+
+class SchedulerConfig(BaseModel):
+    enabled: bool = False
+    poll_interval: int = 60
+    data_file: str = "./data/scheduled_tasks.json"
+
+    @field_validator("poll_interval")
+    @classmethod
+    def _check_poll_interval(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("poll_interval must be >= 1")
+        return v
+
+
+class SkillsConfig(BaseModel):
+    enabled: bool = True
+    directory: str = "./skills"
+
+
+class WebConfig(BaseModel):
+    brave_api_key: Optional[str] = None
+    fetch_timeout: int = 30
+
+    @field_validator("brave_api_key", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Optional[str]:
+        return _empty_str_to_none(v)
+
+
+class ClaudeCodeConfig(BaseModel):
+    enabled: bool = False
+    bridge_url: Optional[str] = None
+    bridge_port: int = 9842
+    bridge_token: Optional[str] = None
+    projects_dir: str = "~/.claude/projects"
+    permission_mode: Optional[str] = None
+    timeout: int = 0
+    claude_path: str = "claude"
+    state_file: str = "data/cc_user_states.json"
+
+    @field_validator("bridge_url", "bridge_token", "permission_mode", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Optional[str]:
+        return _empty_str_to_none(v)
+
+
+class LoggingConfig(BaseModel):
+    level: str = "INFO"
+
+    @field_validator("level")
+    @classmethod
+    def _check_level(cls, v: str) -> str:
+        v = v.upper()
+        if v not in _VALID_LOG_LEVELS:
+            raise ValueError(f"logging level must be one of {_VALID_LOG_LEVELS}")
+        return v
+
+
+class AppConfig(BaseModel):
+    agent: AgentConfig = Field(default_factory=AgentConfig)
+    provider: ProviderConfig = Field(default_factory=ProviderConfig)
+    channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    mcp_servers: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    skills: SkillsConfig = Field(default_factory=SkillsConfig)
+    web: WebConfig = Field(default_factory=WebConfig)
+    claude_code: ClaudeCodeConfig = Field(default_factory=ClaudeCodeConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
+
+
+def load_config(path: str = "config.yaml") -> AppConfig:
     """Load and validate config from YAML file."""
     config_path = Path(path)
     if not config_path.exists():
@@ -38,18 +164,5 @@ def load_config(path: str = "config.yaml") -> dict:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
 
-    config = _walk_expand(raw)
-
-    # Defaults
-    config.setdefault("agent", {})
-    config["agent"].setdefault("workspace", "./workspace")
-    config["agent"].setdefault("max_tool_iterations", 20)
-    config.setdefault("provider", {})
-    config.setdefault("channels", {})
-    config.setdefault("scheduler", {"enabled": False})
-    config.setdefault("mcp_servers", {})
-    config.setdefault("skills", {"directory": "./skills", "enabled": True})
-    config.setdefault("web", {})
-    config.setdefault("logging", {"level": "INFO"})
-
-    return config
+    expanded = _walk_expand(raw or {})
+    return AppConfig.model_validate(expanded)

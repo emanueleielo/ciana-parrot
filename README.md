@@ -225,6 +225,7 @@ make down      # Stop
 make logs      # Follow logs
 make restart   # Restart
 make shell     # Shell into container
+make bridge-cc # Start Claude Code bridge on host (port 9842)
 ```
 
 ## Host Filesystem Access
