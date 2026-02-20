@@ -8,6 +8,6 @@ services:
     volumes:
       - ./workspace:/app/workspace
       - ./data:/app/data
-      - ./skills:/app/skills
+      - ./skills:/app/workspace/skills
       - ./config.yaml:/app/config.yaml:ro
       - ~/.claude/projects:/app/.claude-projects:ro  # Claude Code sessions (read-only)
