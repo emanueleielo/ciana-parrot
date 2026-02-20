@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from deepagents import create_deep_agent
-from deepagents.backends import FilesystemBackend
+from .backend import WorkspaceShellBackend
 from langchain.chat_models import init_chat_model
 import aiosqlite
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -47,7 +47,6 @@ async def create_cianaparrot_agent(config: AppConfig):
     # Workspace
     workspace = config.agent.workspace
     Path(workspace).mkdir(parents=True, exist_ok=True)
-    Path(workspace, "sessions").mkdir(parents=True, exist_ok=True)
 
     # Memory files (paths relative to workspace, resolved by FilesystemBackend)
     memory_files = []
@@ -57,13 +56,13 @@ async def create_cianaparrot_agent(config: AppConfig):
             memory_files.append(fname)
             logger.info("Memory file loaded: %s", fpath)
 
-    # Skills directory
+    # Skills directory (virtual path relative to workspace)
     skills_dirs = []
     if config.skills.enabled:
-        skills_dir = config.skills.directory
-        if Path(skills_dir).exists():
-            skills_dirs.append(skills_dir)
-            logger.info("Skills directory: %s", skills_dir)
+        skills_path = Path(workspace, "skills")
+        skills_path.mkdir(parents=True, exist_ok=True)
+        skills_dirs.append("skills")
+        logger.info("Skills directory: %s (workspace-relative)", skills_path)
 
     # Custom tools
     custom_tools = [web_search, web_fetch, schedule_task, list_tasks, cancel_task]
@@ -80,8 +79,10 @@ async def create_cianaparrot_agent(config: AppConfig):
         except Exception as e:
             logger.warning("Failed to load MCP tools: %s", e)
 
-    # Checkpointer (SQLite for persistence across restarts)
-    db_path = str(Path(workspace, "checkpoints.db"))
+    # Checkpointer (SQLite in data_dir — outside agent sandbox)
+    data_dir = config.agent.data_dir
+    Path(data_dir).mkdir(parents=True, exist_ok=True)
+    db_path = str(Path(data_dir, "checkpoints.db"))
     conn = await aiosqlite.connect(db_path)
     checkpointer = AsyncSqliteSaver(conn)
     await checkpointer.setup()
@@ -94,7 +95,7 @@ async def create_cianaparrot_agent(config: AppConfig):
         memory=memory_files,
         skills=skills_dirs if skills_dirs else None,
         tools=all_tools,
-        backend=FilesystemBackend(root_dir=workspace, virtual_mode=True),
+        backend=WorkspaceShellBackend(root_dir=workspace, virtual_mode=True),
         checkpointer=checkpointer,
     )
 

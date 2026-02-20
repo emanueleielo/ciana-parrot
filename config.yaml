@@ -2,6 +2,7 @@
 
 agent:
   workspace: "./workspace"
+  data_dir: "./data"
   max_tool_iterations: 42
 
 provider:
@@ -34,7 +35,7 @@ mcp_servers: {}
 #    args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
 
 skills:
-  directory: "./skills"
+  directory: "skills"    # Virtual path relative to workspace
   enabled: true
 
 web:
