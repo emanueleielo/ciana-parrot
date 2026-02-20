@@ -44,6 +44,7 @@ def _empty_str_to_none(v: Any) -> Optional[str]:
 
 class AgentConfig(BaseModel):
     workspace: str = "./workspace"
+    data_dir: str = "./data"
     max_tool_iterations: int = 20
 
 
@@ -101,7 +102,7 @@ class SchedulerConfig(BaseModel):
 
 class SkillsConfig(BaseModel):
     enabled: bool = True
-    directory: str = "./skills"
+    directory: str = "skills"  # Virtual path relative to workspace
 
 
 class WebConfig(BaseModel):

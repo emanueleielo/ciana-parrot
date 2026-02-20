@@ -18,17 +18,47 @@ logger = logging.getLogger(__name__)
 class MessageRouter:
     """Routes messages from channels to the agent."""
 
-    def __init__(self, agent, config: AppConfig):
+    def __init__(self, agent, config: AppConfig, checkpointer=None):
         self._agent = agent
         self._config = config
         self._workspace = config.agent.workspace
+        self._data_dir = config.agent.data_dir
         self._allowed_users = self._load_allowed_users()
         # Track session resets (persisted so /new survives container restarts)
-        self._session_store = JsonStore(Path(self._workspace, "session_counters.json"))
+        self._session_store = JsonStore(Path(self._data_dir, "session_counters.json"))
         self._session_counters: dict[str, int] = {
             k: v for k, v in self._session_store.all().items()
             if isinstance(v, int)
         }
+        # Ensure counters don't collide with existing checkpoint threads
+        self._sync_counters_with_checkpoints(checkpointer)
+
+    def _sync_counters_with_checkpoints(self, checkpointer) -> None:
+        """Ensure session counters are higher than any existing checkpoint thread."""
+        if checkpointer is None:
+            return
+        try:
+            import sqlite3
+            # Find the DB path from the checkpointer's connection
+            db_path = Path(self._data_dir, "checkpoints.db")
+            if not db_path.exists():
+                return
+            conn = sqlite3.connect(str(db_path))
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT thread_id FROM checkpoints")
+            for (thread_id,) in cur.fetchall():
+                parts = thread_id.rsplit("_s", 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    base_key = parts[0]
+                    existing = int(parts[1])
+                    current = self._session_counters.get(base_key, 0)
+                    if existing >= current:
+                        self._session_counters[base_key] = existing + 1
+                        self._session_store.set(base_key, existing + 1)
+                        logger.info("Session counter synced: %s -> s%d (was %d)", base_key, existing + 1, current)
+            conn.close()
+        except Exception as e:
+            logger.warning("Failed to sync session counters with checkpoints: %s", e)
 
     def _load_allowed_users(self) -> dict[str, list[str]]:
         """Load allowed users from channel configs."""
@@ -137,7 +167,7 @@ class MessageRouter:
 
     def _log_message(self, thread_id: str, role: str, content: str, msg: IncomingMessage) -> None:
         """Append message to JSONL session log."""
-        sessions_dir = Path(self._workspace, "sessions")
+        sessions_dir = Path(self._data_dir, "sessions")
         sessions_dir.mkdir(parents=True, exist_ok=True)
 
         log_path = sessions_dir / f"{thread_id}.jsonl"
