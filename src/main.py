@@ -31,7 +31,7 @@ async def main() -> None:
     logger.info("Agent ready")
 
     # Router
-    router = MessageRouter(agent, config)
+    router = MessageRouter(agent, config, checkpointer=checkpointer)
 
     # Channels
     channels = []
