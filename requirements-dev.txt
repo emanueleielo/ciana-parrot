@@ -1,0 +1,5 @@
+# Dev/test dependencies (not included in production image)
+-r requirements.txt
+pytest>=8.0
+pytest-asyncio>=0.24
+pytest-mock>=3.14

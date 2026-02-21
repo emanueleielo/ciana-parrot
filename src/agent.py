@@ -9,6 +9,7 @@ from langchain.chat_models import init_chat_model
 import aiosqlite
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from . import middleware as _middleware  # noqa: F401 — patches skill YAML parser
 from .config import AppConfig
 from .tools.web import web_search, web_fetch, init_web_tools
 from .tools.cron import schedule_task, list_tasks, cancel_task, init_cron_tools
