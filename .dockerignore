@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+venv
+.venv
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-compose*.yml
+
+# Dev/docs
+*.md
+!requirements.txt
+LICENSE
+Makefile
+tests/
+.claude/
+
+# Runtime data (mounted as volumes)
+workspace/
+data/
+skills/
+
+
+# Env files
+.env
+.env.*
+!.env.example

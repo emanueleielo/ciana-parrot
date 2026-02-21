@@ -15,6 +15,8 @@ ALLOWED_COMMANDS = frozenset({
     "python", "python3", "pip", "pip3", # Python
     "git",                              # Version control
     "jq",                               # JSON processing
+    "ffmpeg", "ffprobe",                # Media processing
+    "nano-pdf",                         # PDF editing (Gemini-powered)
     "echo", "date", "env", "whoami",    # Basic utils
     "tar", "gzip", "gunzip", "unzip",   # Archives
     "wc", "sort", "uniq", "tr", "cut",  # Text processing (on piped data)
