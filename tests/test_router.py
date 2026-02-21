@@ -178,3 +178,64 @@ class TestHandleMessage:
         result = await router.handle_message(msg, router_config.channels.telegram)
         assert result is not None
         assert "error" in result.text.lower()
+
+    @pytest.mark.asyncio
+    async def test_image_with_caption(self, router, mock_agent, router_config):
+        """Photo with caption should send multimodal content to agent."""
+        msg = IncomingMessage(
+            channel="telegram", chat_id="1", user_id="user1",
+            user_name="Test", text="What is this?", is_private=True,
+            image_base64="dGVzdA==",
+        )
+        result = await router.handle_message(msg, router_config.channels.telegram)
+        assert result is not None
+        # Verify multimodal content was sent
+        call_args = mock_agent.ainvoke.call_args
+        content = call_args[0][0]["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert len(content) == 2
+        assert content[0]["type"] == "text"
+        assert content[1]["type"] == "image_url"
+        assert "data:image/jpeg;base64,dGVzdA==" in content[1]["image_url"]["url"]
+
+    @pytest.mark.asyncio
+    async def test_image_without_caption(self, router, mock_agent, router_config):
+        """Photo without caption in private chat should still be processed."""
+        msg = IncomingMessage(
+            channel="telegram", chat_id="1", user_id="user1",
+            user_name="Test", text="", is_private=True,
+            image_base64="dGVzdA==",
+        )
+        result = await router.handle_message(msg, router_config.channels.telegram)
+        assert result is not None
+        call_args = mock_agent.ainvoke.call_args
+        content = call_args[0][0]["messages"][0]["content"]
+        assert isinstance(content, list)
+        assert content[1]["type"] == "image_url"
+
+    @pytest.mark.asyncio
+    async def test_group_trigger_with_image(self, router, mock_agent, router_config):
+        """Image with trigger in group chat should respond."""
+        msg = IncomingMessage(
+            channel="telegram", chat_id="1", user_id="user1",
+            user_name="Test", text="@Bot describe this", is_private=False,
+            image_base64="dGVzdA==",
+        )
+        result = await router.handle_message(msg, router_config.channels.telegram)
+        assert result is not None
+        call_args = mock_agent.ainvoke.call_args
+        content = call_args[0][0]["messages"][0]["content"]
+        assert isinstance(content, list)
+
+    @pytest.mark.asyncio
+    async def test_text_message_stays_string(self, router, mock_agent, router_config):
+        """Regular text message content should remain a plain string, not a list."""
+        msg = IncomingMessage(
+            channel="telegram", chat_id="1", user_id="user1",
+            user_name="Test", text="hello", is_private=True,
+        )
+        result = await router.handle_message(msg, router_config.channels.telegram)
+        assert result is not None
+        call_args = mock_agent.ainvoke.call_args
+        content = call_args[0][0]["messages"][0]["content"]
+        assert isinstance(content, str)

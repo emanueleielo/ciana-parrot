@@ -14,6 +14,7 @@ from src.config import (
     ProviderConfig,
     SchedulerConfig,
     TelegramChannelConfig,
+    TranscriptionConfig,
     WebConfig,
     _expand_env,
     _walk_expand,
@@ -165,6 +166,42 @@ class TestWebConfig:
     def test_default_timeout(self):
         cfg = WebConfig()
         assert cfg.fetch_timeout == 30
+
+
+class TestTranscriptionConfig:
+    def test_defaults(self):
+        cfg = TranscriptionConfig()
+        assert cfg.enabled is False
+        assert cfg.provider == "groq"
+        assert cfg.model == "whisper-large-v3-turbo"
+        assert cfg.api_key is None
+        assert cfg.base_url is None
+        assert cfg.timeout == 30
+
+    def test_api_key_empty_to_none(self):
+        cfg = TranscriptionConfig(api_key="")
+        assert cfg.api_key is None
+
+    def test_api_key_whitespace_to_none(self):
+        cfg = TranscriptionConfig(api_key="  ")
+        assert cfg.api_key is None
+
+    def test_api_key_value_kept(self):
+        cfg = TranscriptionConfig(api_key="gsk_test")
+        assert cfg.api_key == "gsk_test"
+
+    def test_base_url_empty_to_none(self):
+        cfg = TranscriptionConfig(base_url="")
+        assert cfg.base_url is None
+
+    def test_valid_providers(self):
+        for provider in ("groq", "openai"):
+            cfg = TranscriptionConfig(provider=provider)
+            assert cfg.provider == provider
+
+    def test_invalid_provider(self):
+        with pytest.raises(ValidationError, match="transcription provider"):
+            TranscriptionConfig(provider="invalid")
 
 
 class TestClaudeCodeConfig:

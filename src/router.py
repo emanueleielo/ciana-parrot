@@ -130,7 +130,7 @@ class MessageRouter:
         if not should_respond:
             return None
 
-        if not clean_text:
+        if not clean_text and not msg.image_base64:
             return None
 
         # Thread ID for LangGraph persistence
@@ -149,10 +149,21 @@ class MessageRouter:
         logger.info("Processing: channel=%s chat=%s user=%s thread=%s",
                      msg.channel, msg.chat_id, msg.user_name, thread_id)
 
+        # Build message content (multimodal if image present)
+        if msg.image_base64:
+            content = [
+                {"type": "text", "text": formatted},
+                {"type": "image_url", "image_url": {
+                    "url": f"data:{msg.image_mime_type};base64,{msg.image_base64}",
+                }},
+            ]
+        else:
+            content = formatted
+
         # Invoke agent
         try:
             result = await self._agent.ainvoke(
-                {"messages": [{"role": "user", "content": formatted}]},
+                {"messages": [{"role": "user", "content": content}]},
                 config={"configurable": {"thread_id": thread_id}},
             )
             agent_resp = extract_agent_response(result)

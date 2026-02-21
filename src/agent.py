@@ -13,6 +13,7 @@ from . import middleware as _middleware  # noqa: F401 — patches skill YAML par
 from .config import AppConfig
 from .tools.web import web_search, web_fetch, init_web_tools
 from .tools.cron import schedule_task, list_tasks, cancel_task, init_cron_tools
+from .transcription import init_transcription
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,10 @@ async def create_cianaparrot_agent(config: AppConfig):
     # Initialize tool configs
     init_web_tools(config.web)
     init_cron_tools(config.scheduler)
+
+    # Initialize transcription if enabled
+    if config.transcription.enabled:
+        init_transcription(config.transcription)
 
     # LLM provider
     provider_name = config.provider.name

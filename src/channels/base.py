@@ -29,6 +29,8 @@ class IncomingMessage:
     file_path: Optional[str] = None
     reset_session: bool = False
     message_id: Optional[str] = None
+    image_base64: Optional[str] = None      # base64-encoded photo for vision LLMs
+    image_mime_type: str = "image/jpeg"      # default MIME; channels should override as needed
 
 
 class AbstractChannel(ABC):
