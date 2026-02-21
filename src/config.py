@@ -115,6 +115,27 @@ class WebConfig(BaseModel):
         return _empty_str_to_none(v)
 
 
+class TranscriptionConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "groq"        # "groq" | "openai"
+    model: str = "whisper-large-v3-turbo"
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    timeout: int = 30
+
+    @field_validator("api_key", "base_url", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Optional[str]:
+        return _empty_str_to_none(v)
+
+    @field_validator("provider")
+    @classmethod
+    def _check_provider(cls, v: str) -> str:
+        if v not in ("groq", "openai"):
+            raise ValueError("transcription provider must be 'groq' or 'openai'")
+        return v
+
+
 class ClaudeCodeConfig(BaseModel):
     enabled: bool = False
     bridge_url: Optional[str] = None
@@ -152,6 +173,7 @@ class AppConfig(BaseModel):
     mcp_servers: dict[str, dict[str, Any]] = Field(default_factory=dict)
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     web: WebConfig = Field(default_factory=WebConfig)
+    transcription: TranscriptionConfig = Field(default_factory=TranscriptionConfig)
     claude_code: ClaudeCodeConfig = Field(default_factory=ClaudeCodeConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 

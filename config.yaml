@@ -42,6 +42,13 @@ web:
   brave_api_key: "${BRAVE_API_KEY}"  # Optional, falls back to DuckDuckGo
   fetch_timeout: 42
 
+transcription:
+  enabled: true
+  provider: "openai"
+  model: "whisper-1"
+  api_key: "${OPENAI_API_KEY}"
+  timeout: 30
+
 claude_code:
   enabled: true
   bridge_url: "http://host.docker.internal:9842"    # Host bridge for Claude Code execution

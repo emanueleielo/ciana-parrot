@@ -1,7 +1,9 @@
 """Telegram channel adapter using python-telegram-bot v22+."""
 
 import asyncio
+import base64
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Callable, Optional, Protocol, runtime_checkable
 
@@ -23,6 +25,7 @@ from telegram.ext import (
 )
 
 from ...config import TelegramChannelConfig
+from ...transcription import is_configured as transcription_configured, transcribe
 from ..base import AbstractChannel, IncomingMessage, SendResult
 from .formatting import md_to_telegram_html, split_text, strip_html_tags, TELEGRAM_MAX_MESSAGE_LEN
 from .rendering import render_events
@@ -109,7 +112,11 @@ class TelegramChannel(AbstractChannel):
         self._app.add_handler(CallbackQueryHandler(
             self._handle_tool_details_callback, pattern=r"^td:"))
         self._app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_message)
+            MessageHandler(
+                (filters.TEXT | filters.VOICE | filters.AUDIO | filters.PHOTO)
+                & ~filters.COMMAND,
+                self._handle_message,
+            )
         )
 
         # Manual startup for shared event loop (no run_polling)
@@ -244,11 +251,73 @@ class TelegramChannel(AbstractChannel):
 
     # --- Message handler ---
 
+    async def _transcribe_voice(self, message, chat_id: str) -> Optional[str]:
+        """Download voice/audio and transcribe via configured provider."""
+        if not transcription_configured():
+            logger.info("Transcription not configured, rejecting voice from chat %s", chat_id)
+            await self.send(chat_id, "Voice messages are not supported (transcription not configured).")
+            return None
+
+        try:
+            # Determine filename and MIME type based on message type
+            if message.voice:
+                voice_obj = message.voice
+                filename, mime_type = "voice.ogg", "audio/ogg"
+            else:
+                voice_obj = message.audio
+                filename = message.audio.file_name or "audio.mp3"
+                mime_type = message.audio.mime_type or "audio/mpeg"
+
+            file = await voice_obj.get_file()
+            buf = BytesIO()
+            await file.download_to_memory(buf)
+            audio_bytes = buf.getvalue()
+
+            if not audio_bytes:
+                await self.send(chat_id, "Could not download the voice message (empty file).")
+                return None
+
+            text = await transcribe(audio_bytes, filename=filename, mime_type=mime_type)
+            if not text or not text.strip():
+                await self.send(chat_id, "Could not transcribe the voice message (empty result).")
+                return None
+            return text.strip()
+        except Exception as e:
+            logger.exception("Voice transcription failed for chat %s", chat_id)
+            await self.send(chat_id, f"Voice transcription failed: {e}")
+            return None
+
+    async def _download_photo_base64(self, message, chat_id: str) -> Optional[str]:
+        """Download highest-resolution photo and return base64-encoded string."""
+        try:
+            photo = message.photo[-1]  # highest resolution
+            file = await photo.get_file()
+            buf = BytesIO()
+            await file.download_to_memory(buf)
+            data = buf.getvalue()
+            if not data:
+                await self.send(chat_id, "Failed to download the photo (empty file).")
+                return None
+            return base64.b64encode(data).decode("ascii")
+        except Exception:
+            logger.exception("Photo download failed for chat %s", chat_id)
+            await self.send(chat_id, "Failed to download the photo.")
+            return None
+
     async def _handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle incoming text messages."""
-        if not update.message or not update.message.text:
+        """Handle incoming text, voice, and photo messages."""
+        if not update.message:
             return
         if not self._callback:
+            return
+
+        message = update.message
+        has_voice = bool(message.voice or message.audio)
+        has_photo = bool(message.photo)
+        has_text = bool(message.text)
+
+        # Must have at least one supported content type
+        if not has_voice and not has_photo and not has_text:
             return
 
         # Dedup: skip already-seen updates
@@ -263,15 +332,14 @@ class TelegramChannel(AbstractChannel):
 
         chat = update.effective_chat
         user = update.effective_user
-        text = update.message.text
         chat_id = str(chat.id)
         user_id = str(user.id) if user else "unknown"
         is_private = chat.type == "private"
 
-        # Intercept ReplyKeyboard buttons for mode handlers
-        if is_private:
+        # Intercept ReplyKeyboard buttons for mode handlers (text only)
+        if is_private and has_text:
             for handler in self._mode_handlers:
-                btn = handler.match_button(text)
+                btn = handler.match_button(message.text)
                 if btn == "exit":
                     await handler.exit_with_keyboard_remove(user_id, chat_id)
                     return
@@ -279,12 +347,40 @@ class TelegramChannel(AbstractChannel):
                     await handler.show_menu(user_id, chat_id)
                     return
 
-        # Mode intercept (private chats only)
+        # Mode intercept (private chats only) — checked before media
+        # download/transcription to avoid wasted API calls
         if is_private:
             for handler in self._mode_handlers:
                 if handler.is_active(user_id):
-                    self._tracked_task(handler.process_message(user_id, text, chat.id))
+                    if has_photo:
+                        await self.send(chat_id, "Photos are not supported in Claude Code mode.")
+                        return
+                    if has_voice:
+                        # Transcribe voice then forward as text to CC mode
+                        transcribed = await self._transcribe_voice(message, chat_id)
+                        if transcribed is None:
+                            return
+                        self._tracked_task(handler.process_message(user_id, transcribed, chat.id))
+                        return
+                    self._tracked_task(handler.process_message(user_id, message.text, chat.id))
                     return
+
+        # Determine text and image content based on message type
+        text = ""
+        image_base64 = None
+
+        if has_voice:
+            transcribed = await self._transcribe_voice(message, chat_id)
+            if transcribed is None:
+                return
+            text = transcribed
+        elif has_photo:
+            image_base64 = await self._download_photo_base64(message, chat_id)
+            if image_base64 is None:
+                return
+            text = message.caption or ""
+        else:
+            text = message.text
 
         msg = IncomingMessage(
             channel=self.name,
@@ -293,7 +389,8 @@ class TelegramChannel(AbstractChannel):
             user_name=user.first_name if user else "unknown",
             text=text,
             is_private=is_private,
-            message_id=str(update.message.message_id),
+            message_id=str(message.message_id),
+            image_base64=image_base64,
         )
 
         # Process in background so the handler returns immediately
