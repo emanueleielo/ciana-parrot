@@ -8,6 +8,9 @@ TELEGRAM_MAX_MESSAGE_LEN = 4096
 
 def md_to_telegram_html(text: str) -> str:
     """Convert Markdown to Telegram-compatible HTML."""
+    # Pre-process: convert Markdown tables to fenced code blocks (monospace)
+    text = _md_tables_to_monospace(text)
+
     # Split out fenced code blocks to protect them from further processing
     # Require closing ``` on its own line to avoid false matches
     # when tool results contain ``` mid-line
@@ -77,6 +80,108 @@ def strip_html_tags(text: str) -> str:
     """Remove HTML tags and unescape entities for plain-text fallback."""
     cleaned = re.sub(r"<[^>]+>", "", text)
     return html.unescape(cleaned)
+
+
+def _could_be_table_row(line: str) -> bool:
+    """Check if a line could be part of a Markdown table."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    return stripped.startswith('|') or stripped.count('|') >= 2
+
+
+def _is_table_separator(line: str) -> bool:
+    """Check if a line is a Markdown table separator (e.g., |---|---|)."""
+    stripped = line.strip()
+    if stripped.startswith('|'):
+        stripped = stripped[1:]
+    if stripped.endswith('|'):
+        stripped = stripped[:-1]
+    return bool(stripped) and bool(re.match(r'^[\s\-:|]+$', stripped)) and '-' in stripped
+
+
+def _parse_table_cells(line: str) -> list[str]:
+    """Parse a Markdown table row into a list of cell contents."""
+    stripped = line.strip()
+    if stripped.startswith('|'):
+        stripped = stripped[1:]
+    if stripped.endswith('|'):
+        stripped = stripped[:-1]
+    return [cell.strip() for cell in stripped.split('|')]
+
+
+def _format_table_block(table_lines: list[str]) -> str:
+    """Format Markdown table lines as aligned monospace text."""
+    rows = []
+    for line in table_lines:
+        if _is_table_separator(line):
+            continue
+        rows.append(_parse_table_cells(line))
+
+    if not rows:
+        return '\n'.join(table_lines)
+
+    num_cols = max(len(row) for row in rows)
+    col_widths = [0] * num_cols
+    for row in rows:
+        for j in range(min(len(row), num_cols)):
+            col_widths[j] = max(col_widths[j], len(row[j]))
+
+    output = []
+    for idx, row in enumerate(rows):
+        cells = []
+        for j in range(num_cols):
+            cell = row[j] if j < len(row) else ''
+            cells.append(cell.ljust(col_widths[j]))
+        output.append('  '.join(cells).rstrip())
+        if idx == 0:
+            output.append('  '.join('\u2500' * w for w in col_widths))
+
+    return '\n'.join(output)
+
+
+def _md_tables_to_monospace(text: str) -> str:
+    """Convert Markdown tables to fenced code blocks for monospace rendering."""
+    lines = text.split('\n')
+    result = []
+    i = 0
+    in_code_block = False
+
+    while i < len(lines):
+        line = lines[i]
+
+        if line.strip().startswith('```'):
+            in_code_block = not in_code_block
+            result.append(line)
+            i += 1
+            continue
+
+        if in_code_block:
+            result.append(line)
+            i += 1
+            continue
+
+        if _could_be_table_row(line):
+            table_lines = []
+            j = i
+            while j < len(lines) and _could_be_table_row(lines[j]):
+                table_lines.append(lines[j])
+                j += 1
+
+            if len(table_lines) >= 3 and _is_table_separator(table_lines[1]):
+                formatted = _format_table_block(table_lines)
+                result.append('```')
+                result.append(formatted)
+                result.append('```')
+                i = j
+            else:
+                result.append(line)
+                i += 1
+        else:
+            result.append(line)
+            i += 1
+
+    return '\n'.join(result)
 
 
 def split_text(text: str, max_len: int) -> list[str]:
