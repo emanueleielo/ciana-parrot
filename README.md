@@ -17,7 +17,7 @@
 
 ## What is CianaParrot?
 
-CianaParrot is a minimal but complete AI personal assistant that runs on your own infrastructure. It combines interactive chat via Telegram (and other channels) with autonomous scheduled tasks — all configured through a single YAML file.
+CianaParrot is a minimal but complete AI personal assistant that runs on your own infrastructure. Built on the [DeepAgents](https://github.com/deepagents/deepagents) framework with LangChain/LangGraph, it combines interactive chat via Telegram (and other channels) with autonomous scheduled tasks — all configured through a single YAML file.
 
 **Key features:**
 - **Multi-provider LLM** — Anthropic, OpenAI, Google Gemini, Groq, Ollama, OpenRouter, vLLM
