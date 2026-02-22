@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 50" width="460" height="50">
+  <!-- Parrot icon -->
+  <g transform="translate(0, 5) scale(1.11)">
+    <defs>
+      <radialGradient id="b" cx="35%" cy="35%" r="60%"><stop offset="0%" stop-color="#5cf5d5"/><stop offset="100%" stop-color="#00a88a"/></radialGradient>
+      <radialGradient id="c" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#7af8e0" stop-opacity="0.4"/><stop offset="100%" stop-color="#5cf5d5" stop-opacity="0"/></radialGradient>
+      <linearGradient id="k" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ff9a6c"/><stop offset="50%" stop-color="#ff6b40"/><stop offset="100%" stop-color="#d04520"/></linearGradient>
+    </defs>
+    <circle cx="15" cy="18" r="12" fill="url(#b)"/>
+    <ellipse cx="11" cy="22" rx="6" ry="5" fill="url(#c)"/>
+    <ellipse cx="10" cy="18" rx="5" ry="8" fill="#00c9a0" opacity="0.12" transform="rotate(-15 10 18)"/>
+    <path d="M7 7.5c1.8-3.5 5.5-5 9-3.2" stroke="#5cf5d5" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M10 5.5c1.5-2.2 4.5-3.2 7-1.5" stroke="#7af8e0" stroke-width="2" stroke-linecap="round"/>
+    <path d="M13.5 4.5c0.8-1.2 2.8-1.8 4-0.8" stroke="#9afae8" stroke-width="1.3" stroke-linecap="round"/>
+    <path d="M25 13c3 0.5 5.2 2.8 4.5 5.8s-3.2 4.5-5.5 3.5c-1-.4-1.1-1.5-.5-2.6l1-2c.5-1 .3-2.8-.8-4" fill="url(#k)"/>
+    <path d="M24.2 18.5c1.6 0 3.1-0.9 3-2.1" stroke="#b03818" stroke-width="0.7" stroke-linecap="round" opacity="0.4"/>
+    <circle cx="27.2" cy="15.8" r="0.5" fill="#b03818" opacity="0.25"/>
+    <circle cx="18" cy="15" r="4.2" fill="#050510"/>
+    <circle cx="18" cy="15" r="3" fill="#0a0a1a"/>
+    <circle cx="19.4" cy="13.5" r="1.6" fill="#fff"/>
+    <circle cx="16.8" cy="16.2" r="0.55" fill="#fff" opacity="0.3"/>
+    <circle cx="18" cy="15" r="4.2" fill="none" stroke="#00F0FF" stroke-width="0.3" opacity="0.25"/>
+  </g>
+  <!-- CIANAPARROT text in Syne Bold paths -->
+  <g transform="translate(52, 38) scale(0.04, -0.04)" fill="#1a1a2e">
+    <path d="M832 233Q823 155 777.0 100.0Q731 45 652.0 16.0Q573 -13 464 -13Q373 -13 297.5 8.0Q222 29 167.5 71.0Q113 113 83.0 175.5Q53 238 53 322Q53 406 83.0 469.0Q113 532 167.5 574.5Q222 617 297.5 638.5Q373 660 464 660Q573 660 652.5 630.0Q732 600 778.0 544.5Q824 489 832 410H700Q687 452 656.5 482.5Q626 513 578.0 529.0Q530 545 464 545Q382 545 320.0 519.5Q258 494 224.0 444.5Q190 395 190 322Q190 250 224.0 201.0Q258 152 320.0 126.5Q382 101 464 101Q530 101 577.5 117.0Q625 133 655.5 163.0Q686 193 700 233Z" transform="translate(0, 0)"/>
+    <path d="M96 647H229V0H96Z" transform="translate(965, 0)"/>
+    <path d="M178 141V252H606V141ZM17 0 321 647H465L772 0H627L361 583H425L161 0Z" transform="translate(1369, 0)"/>
+    <path d="M733 132 691 115V647H824V0H691L168 511L210 528V0H77V647H210Z" transform="translate(2238, 0)"/>
+    <path d="M178 141V252H606V141ZM17 0 321 647H465L772 0H627L361 583H425L161 0Z" transform="translate(3219, 0)"/>
+    <path d="M192 210V316H488Q541 316 572.0 344.5Q603 373 603 424Q603 477 572.0 505.0Q541 533 488 533H208V0H75V647H476Q530 647 577.5 634.0Q625 621 660.5 594.0Q696 567 716.0 525.0Q736 483 736 424Q736 366 716.0 325.0Q696 284 660.5 258.5Q625 233 577.5 221.5Q530 210 476 210Z" transform="translate(4088, 0)"/>
+    <path d="M178 141V252H606V141ZM17 0 321 647H465L772 0H627L361 583H425L161 0Z" transform="translate(4952, 0)"/>
+    <path d="M77 0V647H516Q591 647 646.5 626.5Q702 606 733.0 562.5Q764 519 764 451Q764 405 748.0 373.0Q732 341 703.5 321.0Q675 301 638.0 290.5Q601 280 559 277L545 285Q615 284 660.0 273.5Q705 263 727.5 235.5Q750 208 750 154V0H617V145Q617 182 604.0 202.5Q591 223 557.5 231.0Q524 239 461 239H210V0ZM210 343H516Q572 343 601.5 370.0Q631 397 631 443Q631 487 601.5 510.0Q572 533 516 533H210Z" transform="translate(5821, 0)"/>
+    <path d="M77 0V647H516Q591 647 646.5 626.5Q702 606 733.0 562.5Q764 519 764 451Q764 405 748.0 373.0Q732 341 703.5 321.0Q675 301 638.0 290.5Q601 280 559 277L545 285Q615 284 660.0 273.5Q705 263 727.5 235.5Q750 208 750 154V0H617V145Q617 182 604.0 202.5Q591 223 557.5 231.0Q524 239 461 239H210V0ZM210 343H516Q572 343 601.5 370.0Q631 397 631 443Q631 487 601.5 510.0Q572 533 516 533H210Z" transform="translate(6727, 0)"/>
+    <path d="M462 -13Q333 -13 241.5 27.5Q150 68 101.5 143.0Q53 218 53 323Q53 429 101.5 504.0Q150 579 241.5 619.5Q333 660 462 660Q592 660 683.0 619.5Q774 579 822.5 504.0Q871 429 871 323Q871 218 822.5 143.0Q774 68 683.0 27.5Q592 -13 462 -13ZM462 102Q542 102 602.5 126.0Q663 150 697.5 199.0Q732 248 732 323Q732 398 697.5 447.0Q663 496 602.5 520.5Q542 545 462 545Q383 545 321.0 520.5Q259 496 224.0 447.0Q189 398 189 323Q189 248 224.0 199.0Q259 150 321.0 126.0Q383 102 462 102Z" transform="translate(7633, 0)"/>
+    <path d="M20 647H702V536H20ZM295 550H428V0H295Z" transform="translate(8637, 0)"/>
+  </g>
+</svg>
