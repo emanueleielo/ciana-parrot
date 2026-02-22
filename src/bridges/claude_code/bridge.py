@@ -61,6 +61,8 @@ class UserSession:
     active_project: Optional[str] = None
     active_project_path: Optional[str] = None
     active_session_id: Optional[str] = None
+    active_model: Optional[str] = None
+    active_effort: Optional[str] = None
 
 
 _CMD_MSG_RE = re.compile(r"<command-message>([\w/-]+)</command-message>")
@@ -164,6 +166,44 @@ class ClaudeCodeBridge:
         state.active_session_id = session_id
         self._persist_user(user_id)
 
+    def set_model(self, user_id: str, model: Optional[str]) -> None:
+        """Set model preference for the user's CC session."""
+        state = self.get_user_state(user_id)
+        state.active_model = model
+        self._persist_user(user_id)
+
+    def set_effort(self, user_id: str, effort: Optional[str]) -> None:
+        """Set effort level for the user's CC session."""
+        state = self.get_user_state(user_id)
+        state.active_effort = effort
+        self._persist_user(user_id)
+
+    async def fork_session(self, user_id: str) -> CCResponse:
+        """Fork the current session (compact workaround)."""
+        state = self.get_user_state(user_id)
+        if not state.active_session_id:
+            return CCResponse(error="No active session to fork.")
+
+        cmd = self._build_command("Continue from where we left off.", state, fork=True)
+        cwd = state.active_project_path
+
+        existing_sessions: set[str] = set()
+        if state.active_project:
+            project_dir = self._projects_dir / state.active_project
+            if project_dir.exists():
+                existing_sessions = {f.stem for f in project_dir.glob("*.jsonl")}
+
+        result = await self._execute_command(cmd, cwd)
+
+        if state.active_project:
+            new_id = self._detect_new_session(state.active_project, existing_sessions)
+            if new_id:
+                state.active_session_id = new_id
+                self._persist_user(user_id)
+                logger.info("Forked to new session: %s", new_id)
+
+        return result
+
     async def send_message(self, user_id: str, text: str) -> CCResponse:
         """Send a message to Claude Code CLI and return the response."""
         state = self.get_user_state(user_id)
@@ -197,16 +237,23 @@ class ClaudeCodeBridge:
 
     # --- Private helpers ---
 
-    def _build_command(self, text: str, state: UserSession) -> list[str]:
+    def _build_command(self, text: str, state: UserSession,
+                       *, fork: bool = False) -> list[str]:
         cmd = [self._claude_path, "-p"]
         if state.active_session_id:
             if not re.fullmatch(r"[a-zA-Z0-9_-]+", state.active_session_id):
                 logger.warning("Invalid session ID format: %r", state.active_session_id)
             else:
                 cmd.extend(["--resume", state.active_session_id])
+                if fork:
+                    cmd.append("--fork-session")
         cmd.extend(["--output-format", "stream-json", "--verbose"])
         if self._permission_mode:
             cmd.extend(["--permission-mode", self._permission_mode])
+        if state.active_model:
+            cmd.extend(["--model", state.active_model])
+        if state.active_effort:
+            cmd.extend(["--effort", state.active_effort])
         cmd.append(text)
         return cmd
 
@@ -495,6 +542,8 @@ class ClaudeCodeBridge:
                 active_project=s.get("active_project"),
                 active_project_path=s.get("active_project_path"),
                 active_session_id=s.get("active_session_id"),
+                active_model=s.get("active_model"),
+                active_effort=s.get("active_effort"),
             )
         if self._user_states:
             logger.info("Restored CC state for %d user(s)", len(self._user_states))
@@ -508,6 +557,8 @@ class ClaudeCodeBridge:
                 "active_project": state.active_project,
                 "active_project_path": state.active_project_path,
                 "active_session_id": state.active_session_id,
+                "active_model": state.active_model,
+                "active_effort": state.active_effort,
             })
 
     def _detect_new_session(self, project_encoded: str,
