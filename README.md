@@ -1,5 +1,11 @@
 <p align="center">
-  <a href="https://cianaparrot.dev"><img src="images/parrot.svg" alt="CianaParrot" width="120"></a>
+  <a href="https://cianaparrot.dev">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="images/parrot-logo.svg">
+      <source media="(prefers-color-scheme: light)" srcset="images/parrot-logo-light.svg">
+      <img src="images/parrot-logo.svg" alt="CianaParrot" width="460">
+    </picture>
+  </a>
 </p>
 
 <p align="center">
