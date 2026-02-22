@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/img.png" alt="CianaParrot" width="400">
+  <a href="https://cianaparrot.dev"><img src="images/parrot.svg" alt="CianaParrot" width="120"></a>
 </p>
 
 <p align="center">
@@ -7,6 +7,7 @@
 </p>
 
 <p align="center">
+  <a href="https://cianaparrot.dev"><img src="https://img.shields.io/badge/website-cianaparrot.dev-00F0FF?style=flat&logo=vercel&logoColor=white" alt="Website"></a>
   <img src="https://img.shields.io/badge/python-3.13+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/framework-DeepAgents-orange" alt="DeepAgents">
   <img src="https://img.shields.io/badge/deploy-Docker-2496ED?logo=docker&logoColor=white" alt="Docker">
