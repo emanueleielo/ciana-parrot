@@ -30,6 +30,7 @@ from ..utils import typing_indicator
 logger = logging.getLogger(__name__)
 
 CC_PAGE_SIZE = 6
+_VALID_EFFORTS = {"low", "medium", "high"}
 
 # Button labels — imported by channel.py for intercept matching
 CC_BTN_EXIT = "\u2190 Exit CC"
@@ -94,7 +95,11 @@ class ClaudeCodeHandler:
 
     def get_help_lines(self) -> list[str]:
         """Return help text lines for this handler."""
-        return ["/cc - Claude Code mode", "/cc exit - Exit Claude Code mode"]
+        return [
+            "/cc - Claude Code mode",
+            "/cc exit - Exit Claude Code mode",
+            "cc:help - Claude Code commands (in CC mode)",
+        ]
 
     def is_active(self, user_id: str) -> bool:
         return self._bridge.is_claude_code_mode(user_id)
@@ -120,6 +125,9 @@ class ClaudeCodeHandler:
 
     async def process_message(self, user_id: str, text: str, chat_id: int) -> None:
         """Process a text message while in Claude Code mode."""
+        if text.strip().lower().startswith("cc:"):
+            await self._handle_cc_command(user_id, text.strip(), chat_id)
+            return
         lock = self._user_locks.setdefault(user_id, asyncio.Lock())
         async with lock:
             await self._process_message_locked(user_id, text, chat_id)
@@ -135,6 +143,142 @@ class ClaudeCodeHandler:
             for k in oldest:
                 del self._tool_details[k]
         return key
+
+    # --- cc: command dispatch ---
+
+    async def _handle_cc_command(self, user_id: str, text: str, chat_id: int) -> None:
+        """Dispatch a cc: command (e.g. cc:help, cc:model sonnet)."""
+        str_chat_id = str(chat_id)
+        project_name = self._get_project_display_name(user_id)
+        keyboard = _cc_reply_keyboard(project_name)
+
+        raw = text[3:]  # strip "cc:"
+        parts = raw.strip().split(None, 1)
+        command = parts[0].lower() if parts else ""
+        args = parts[1].strip() if len(parts) > 1 else ""
+
+        if command == "help":
+            await self._cc_cmd_help(str_chat_id, keyboard)
+        elif command == "model":
+            await self._cc_cmd_model(user_id, args, str_chat_id, keyboard)
+        elif command == "effort":
+            await self._cc_cmd_effort(user_id, args, str_chat_id, keyboard)
+        elif command == "compact":
+            await self._cc_cmd_compact(user_id, str_chat_id, chat_id, keyboard)
+        elif command == "clear":
+            await self._cc_cmd_clear(user_id, str_chat_id, keyboard)
+        elif command == "status":
+            await self._cc_cmd_status(user_id, str_chat_id, keyboard)
+        elif command == "cost":
+            await self._cc_cmd_cost(str_chat_id, keyboard)
+        else:
+            await self._send(
+                str_chat_id,
+                f"Unknown command: <code>cc:{html.escape(command)}</code>\n"
+                f"Type <code>cc:help</code> for available commands.",
+                reply_markup=keyboard,
+            )
+
+    async def _cc_cmd_help(self, chat_id: str, keyboard) -> None:
+        await self._send(chat_id, (
+            "<b>Claude Code Commands</b>\n\n"
+            "<code>cc:help</code> — Show this help\n"
+            "<code>cc:model [name]</code> — Show or switch model\n"
+            "<code>cc:effort [level]</code> — Set effort (low, medium, high)\n"
+            "<code>cc:compact</code> — Fork session to reduce context\n"
+            "<code>cc:clear</code> — Start new conversation\n"
+            "<code>cc:status</code> — Show session info\n"
+            "<code>cc:cost</code> — Token usage info"
+        ), reply_markup=keyboard)
+
+    async def _cc_cmd_model(self, user_id: str, args: str, chat_id: str, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        if not args:
+            current = state.active_model or "default"
+            await self._send(chat_id, (
+                f"Current model: <code>{html.escape(current)}</code>\n"
+                f"Usage: <code>cc:model sonnet</code> or full ID"
+            ), reply_markup=keyboard)
+            return
+        self._bridge.set_model(user_id, args)
+        await self._send(chat_id,
+                         f"Model set to <code>{html.escape(args)}</code>",
+                         reply_markup=keyboard)
+
+    async def _cc_cmd_effort(self, user_id: str, args: str, chat_id: str, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        if not args:
+            current = state.active_effort or "default"
+            await self._send(chat_id, (
+                f"Current effort: <code>{html.escape(current)}</code>\n"
+                f"Usage: <code>cc:effort low|medium|high</code>"
+            ), reply_markup=keyboard)
+            return
+        level = args.lower()
+        if level not in _VALID_EFFORTS:
+            await self._send(chat_id,
+                             f"Invalid effort: <code>{html.escape(level)}</code> "
+                             f"(valid: low, medium, high)",
+                             reply_markup=keyboard)
+            return
+        self._bridge.set_effort(user_id, level)
+        await self._send(chat_id,
+                         f"Effort set to <code>{level}</code>",
+                         reply_markup=keyboard)
+
+    async def _cc_cmd_compact(self, user_id: str, chat_id: str,
+                              int_chat_id: int, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        if not state.active_session_id:
+            await self._send(chat_id,
+                             "No active session. Start a conversation first.",
+                             reply_markup=keyboard)
+            return
+        await self._send(chat_id, "Forking session\u2026", reply_markup=keyboard)
+        lock = self._user_locks.setdefault(user_id, asyncio.Lock())
+        async with lock:
+            async with typing_indicator(self._app.bot, int_chat_id):
+                cc_resp = await self._bridge.fork_session(user_id)
+        if cc_resp.error:
+            await self._send(chat_id,
+                             f"Fork failed: {html.escape(cc_resp.error)}",
+                             reply_markup=keyboard)
+        else:
+            new_state = self._bridge.get_user_state(user_id)
+            sid = (new_state.active_session_id or "unknown")[:8]
+            await self._send(chat_id,
+                             f"Session forked: <code>{sid}\u2026</code>\n"
+                             f"Context has been reduced.",
+                             reply_markup=keyboard)
+
+    async def _cc_cmd_clear(self, user_id: str, chat_id: str, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        self._bridge.activate_session(
+            user_id, state.active_project, state.active_project_path,
+            session_id=None)
+        await self._send(chat_id,
+                         "Conversation cleared. Send a message to start fresh.",
+                         reply_markup=keyboard)
+
+    async def _cc_cmd_status(self, user_id: str, chat_id: str, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        project_name = self._get_project_display_name(user_id)
+        session = (state.active_session_id or "new")[:8]
+        model = state.active_model or "default"
+        effort = state.active_effort or "default"
+        await self._send(chat_id, (
+            f"<b>Claude Code Status</b>\n\n"
+            f"Project: <code>{html.escape(project_name)}</code>\n"
+            f"Session: <code>{session}\u2026</code>\n"
+            f"Model: <code>{html.escape(model)}</code>\n"
+            f"Effort: <code>{html.escape(effort)}</code>"
+        ), reply_markup=keyboard)
+
+    async def _cc_cmd_cost(self, chat_id: str, keyboard) -> None:
+        await self._send(chat_id,
+                         "Token usage is not available in piped mode.\n"
+                         "Check the Claude Code dashboard for details.",
+                         reply_markup=keyboard)
 
     async def _send_response(self, chat_id: int, str_chat_id: str,
                              compact: str, keyboard, inline_markup) -> None:
@@ -212,13 +356,18 @@ class ClaudeCodeHandler:
                     pass
 
         except TimeoutError:
-            error_text = "Request timed out."
+            timeout_text = (
+                "Claude Code is taking longer than expected. "
+                "It may still be working in the background \u2014 "
+                "try sending a follow-up message in a moment."
+            )
             if placeholder:
                 try:
-                    await placeholder.delete()
+                    await placeholder.edit_text(timeout_text)
                 except Exception:
-                    pass
-            await self._send(str_chat_id, error_text, reply_markup=keyboard)
+                    await self._send(str_chat_id, timeout_text, reply_markup=keyboard)
+            else:
+                await self._send(str_chat_id, timeout_text, reply_markup=keyboard)
 
         except Exception as e:
             logger.exception("Error in Claude Code message for user %s", user_id)
