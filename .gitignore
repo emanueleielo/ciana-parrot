@@ -5,6 +5,11 @@
 data/allowed_users.json
 data/scheduled_tasks.json
 data/cc_user_states.json
+data/session_counters.json
+data/sessions
+data/checkpoints.db
+data/checkpoints.db-shm
+data/checkpoints.db-wal
 workspace/sessions/
 workspace/checkpoints.db*
 
@@ -31,3 +36,5 @@ Thumbs.db
 
 .claude
 CLAUDE.md
+
+static
