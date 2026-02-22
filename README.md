@@ -24,12 +24,12 @@
 
 ## What is CianaParrot?
 
-CianaParrot is a minimal but complete AI personal assistant that runs on your own infrastructure. Built on the [DeepAgents](https://github.com/deepagents/deepagents) framework with LangChain/LangGraph, it combines interactive chat via Telegram (and other channels) with autonomous scheduled tasks — all configured through a single YAML file.
+CianaParrot is a self-hosted AI personal assistant that runs on your own infrastructure — sandboxed inside Docker, but connected to your OS through secure bridges. Built on the [DeepAgents](https://github.com/deepagents/deepagents) framework with LangChain/LangGraph, it combines interactive chat via Telegram (and other channels) with autonomous scheduled tasks — all configured through a single YAML file.
 
 **Key features:**
 - **Multi-provider LLM** — Anthropic, OpenAI, Google Gemini, Groq, Ollama, OpenRouter, vLLM
 - **Multi-channel** — Pluggable architecture, Telegram out of the box
-- **Host bridge system** — Forward messages to CLI tools running on the host (Claude Code built in, extensible to others)
+- **Host bridge system** — Sandboxed in Docker, connected to your OS. Controlled gateways to host apps and tools — Claude Code built in, Apple Notes / Calendar / HomeKit and more coming
 - **Scheduled tasks** — Cron, interval, and one-shot tasks
 - **Web tools** — Search (Brave / DuckDuckGo) and URL fetching built in
 - **Skills system** — Add a folder in `skills/` with a `SKILL.md` and a `skill.py`, and it auto-registers
@@ -235,13 +235,34 @@ logging:
 
 ## Host Bridge System
 
-CianaParrot includes a **bridge architecture** that lets the Dockerized bot forward messages to CLI tools running on the host machine. The bot sends HTTP requests to a lightweight bridge server running outside Docker, which executes commands locally and returns results.
+CianaParrot runs inside a Docker container — it can't see your filesystem, can't launch your apps, can't touch your OS. That's the point. The agent is sandboxed by default.
 
-This pattern is useful for any tool that needs direct host access — native CLIs, local development tools, or services that can't run inside the container.
+**Bridges** are controlled gateways that connect the sandboxed agent to specific host capabilities. Each bridge exposes only the operations you explicitly allow — nothing more.
 
-**Built-in bridge: Claude Code** — talk to [Claude Code](https://docs.anthropic.com/en/docs/claude-code) directly from Telegram, with project/conversation management, tool-use visualization, and session persistence.
+```
+Docker Container (sandboxed)         Host (macOS/Linux)
+┌──────────────────────────┐    ┌──────────────────────────┐
+│  CianaParrot Agent       │◄──►│  Bridge: Claude Code  ✓  │
+│                          │    │  Bridge: Apple Notes  ◎  │
+│  Can't see the host OS   │    │  Bridge: Calendar     ◎  │
+│  Can't escape the sandbox│    │  Bridge: HomeKit      ◎  │
+└──────────────────────────┘    └──────────────────────────┘
+                                 ✓ = built in  ◎ = coming
+```
 
-The bridge system is extensible: the same HTTP bridge + mode handler pattern can be reused to integrate other host-side tools.
+This is the opposite of assistants that run natively on your machine with full OS access. A prompt injection against CianaParrot can't compromise your entire system — only what the active bridge allows, and only the operations that bridge exposes.
+
+### Future bridges
+
+| Bridge | Description |
+|--------|-------------|
+| **Apple Notes** | Read, search, and create notes via the Notes app |
+| **Calendar** | Query and create events in Apple Calendar |
+| **Reminders** | Manage Apple Reminders lists and items |
+| **HomeKit** | Control smart home devices and scenes |
+| **Obsidian** | Read and write to your Obsidian vault |
+| **1Password** | Look up credentials (read-only, no secrets in chat) |
+| **Spotify** | Playback control and queue management |
 
 ### How it works
 
