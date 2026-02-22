@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 50" width="460" height="50">
   <!-- Parrot icon -->
-  <g transform="translate(0, 5) scale(1.11)">
+  <g transform="translate(-2, 1) scale(1.4)">
     <defs>
       <radialGradient id="b" cx="35%" cy="35%" r="60%"><stop offset="0%" stop-color="#5cf5d5"/><stop offset="100%" stop-color="#00a88a"/></radialGradient>
       <radialGradient id="c" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#7af8e0" stop-opacity="0.4"/><stop offset="100%" stop-color="#5cf5d5" stop-opacity="0"/></radialGradient>
