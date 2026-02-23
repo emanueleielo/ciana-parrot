@@ -14,8 +14,10 @@ def router_config(tmp_path) -> AppConfig:
     ws = tmp_path / "workspace"
     ws.mkdir()
     (ws / "sessions").mkdir()
+    data = tmp_path / "data"
+    data.mkdir()
     return AppConfig(
-        agent=AgentConfig(workspace=str(ws)),
+        agent=AgentConfig(workspace=str(ws), data_dir=str(data)),
         channels=ChannelsConfig(
             telegram=TelegramChannelConfig(
                 enabled=True,

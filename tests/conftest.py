@@ -11,6 +11,7 @@ from src.config import (
     AppConfig,
     ChannelsConfig,
     ClaudeCodeConfig,
+    GatewayConfig,
     LoggingConfig,
     ProviderConfig,
     SchedulerConfig,
@@ -42,6 +43,7 @@ def app_config(tmp_path) -> AppConfig:
         skills=SkillsConfig(),
         web=WebConfig(brave_api_key="test-key", fetch_timeout=10),
         transcription=TranscriptionConfig(),
+        gateway=GatewayConfig(),
         claude_code=ClaudeCodeConfig(
             enabled=True,
             state_file=str(tmp_path / "cc_states.json"),
@@ -63,13 +65,16 @@ def mock_agent() -> AsyncMock:
 @pytest.fixture(autouse=True)
 def reset_tool_globals():
     """Save/restore module-level globals between tests."""
-    from src.tools import web, cron
+    from src.tools import web, cron, host
 
     from src import transcription
 
     old_brave = web._brave_api_key
     old_timeout = web._fetch_timeout
     old_data_file = cron._data_file
+    old_host_client = host._gateway_client
+    old_host_bridges = host._available_bridges
+    old_host_timeout = host._default_timeout
     old_transcription = (
         transcription._provider,
         transcription._model,
@@ -81,6 +86,9 @@ def reset_tool_globals():
     web._brave_api_key = old_brave
     web._fetch_timeout = old_timeout
     cron._data_file = old_data_file
+    host._gateway_client = old_host_client
+    host._available_bridges = old_host_bridges
+    host._default_timeout = old_host_timeout
     (
         transcription._provider,
         transcription._model,

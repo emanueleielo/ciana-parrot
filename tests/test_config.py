@@ -8,8 +8,10 @@ from pydantic import ValidationError
 from src.config import (
     AppConfig,
     AgentConfig,
+    BridgeDefinition,
     ChannelsConfig,
     ClaudeCodeConfig,
+    GatewayConfig,
     LoggingConfig,
     ProviderConfig,
     SchedulerConfig,
@@ -204,24 +206,65 @@ class TestTranscriptionConfig:
             TranscriptionConfig(provider="invalid")
 
 
+class TestGatewayConfig:
+    def test_defaults(self):
+        cfg = GatewayConfig()
+        assert cfg.enabled is False
+        assert cfg.url is None
+        assert cfg.port == 9842
+        assert cfg.token is None
+        assert cfg.default_timeout == 30
+        assert cfg.bridges == {}
+
+    def test_url_empty_to_none(self):
+        cfg = GatewayConfig(url="")
+        assert cfg.url is None
+
+    def test_token_empty_to_none(self):
+        cfg = GatewayConfig(token="")
+        assert cfg.token is None
+
+    def test_url_value_kept(self):
+        cfg = GatewayConfig(url="http://localhost:9842")
+        assert cfg.url == "http://localhost:9842"
+
+    def test_token_value_kept(self):
+        cfg = GatewayConfig(token="my-secret")
+        assert cfg.token == "my-secret"
+
+    def test_bridges_from_dict(self):
+        cfg = GatewayConfig(bridges={
+            "apple-notes": BridgeDefinition(allowed_commands=["memo"]),
+            "spotify": BridgeDefinition(allowed_commands=["spogo"]),
+        })
+        assert "apple-notes" in cfg.bridges
+        assert cfg.bridges["apple-notes"].allowed_commands == ["memo"]
+        assert cfg.bridges["spotify"].allowed_commands == ["spogo"]
+
+
+class TestBridgeDefinition:
+    def test_defaults(self):
+        bd = BridgeDefinition()
+        assert bd.allowed_commands == []
+        assert bd.description == ""
+
+    def test_with_values(self):
+        bd = BridgeDefinition(allowed_commands=["memo", "note"], description="Notes")
+        assert bd.allowed_commands == ["memo", "note"]
+        assert bd.description == "Notes"
+
+
 class TestClaudeCodeConfig:
-    def test_bridge_token_empty_to_none(self):
-        cfg = ClaudeCodeConfig(bridge_token="")
-        assert cfg.bridge_token is None
-
-    def test_bridge_url_empty_to_none(self):
-        cfg = ClaudeCodeConfig(bridge_url="")
-        assert cfg.bridge_url is None
-
     def test_permission_mode_empty_to_none(self):
         cfg = ClaudeCodeConfig(permission_mode="")
         assert cfg.permission_mode is None
 
     def test_defaults(self):
         cfg = ClaudeCodeConfig()
-        assert cfg.bridge_port == 9842
         assert cfg.timeout == 0
         assert cfg.claude_path == "claude"
+        assert cfg.enabled is False
+        assert cfg.projects_dir == "~/.claude/projects"
 
 
 class TestLoggingConfig:
@@ -246,6 +289,8 @@ class TestAppConfig:
         assert cfg.provider.name == "anthropic"
         assert cfg.channels.telegram.enabled is False
         assert cfg.mcp_servers == {}
+        assert cfg.gateway.enabled is False
+        assert cfg.gateway.bridges == {}
 
     def test_partial_override(self):
         cfg = AppConfig(agent=AgentConfig(workspace="/tmp/ws"))
