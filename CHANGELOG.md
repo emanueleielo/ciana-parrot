@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.1 — 2026-02-23
+
+### Refactored
+
+- Extracted `ToolDetailsManager` from duplicated tool-details expand/collapse logic in `TelegramChannel` and `ClaudeCodeHandler` into shared `src/channels/telegram/tool_details.py`
+
+### Added
+
+- 13 tests for `ToolDetailsManager` (store, buttons, expand/collapse, prefix isolation, eviction, BadRequest fallback)
+
+## 0.3.0 — 2026-02-22
+
+### Added
+
+- Skill auto-creation with sandboxed execution and workspace isolation
+- Skill catalog with environment-based auto-filtering for available skills
+- Voice message transcription and photo support via Telegram
+- Markdown table rendering as aligned monospace blocks in Telegram
+- `/cc` slash commands in Telegram Claude Code mode with improved timeout handling
+
+### Changed
+
+- Dockerfile hardening for skill execution environment
+- Updated `.gitignore` with runtime data entries
+
+### Docs
+
+- Added parrot SVG logo and cianaparrot.dev website badge to README
+- Added DeepAgents framework reference to README
+- Rebranded host bridge system as secure host gateway architecture in README
+- Updated README intro, key features, and bridge section with security-first messaging
+
 ## 0.2.0 — 2026-02-19
 
 ### Added
