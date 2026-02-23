@@ -12,8 +12,10 @@ data/checkpoints.db-shm
 data/checkpoints.db-wal
 workspace/sessions/
 workspace/checkpoints.db*
+logs/
 
 # Python
+.venv/
 __pycache__/
 *.pyc
 *.pyo
