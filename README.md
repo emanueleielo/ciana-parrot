@@ -47,10 +47,25 @@ CianaParrot is a self-hosted AI personal assistant that runs on your own infrast
 
 ## Quick Start
 
-### 1. Clone and configure
+### One-command install
 
 ```bash
-git clone https://github.com/your-user/ciana-parrot.git
+curl -fsSL https://raw.githubusercontent.com/emanueleielo/ciana-parrot/main/install.sh | bash
+```
+
+This handles everything: prerequisites check, repo clone, `.env` setup (prompts for API keys), Docker build, and host gateway startup.
+
+> **Flags:** `bash install.sh --dry-run` to preview without changes, `--no-prompt` for non-interactive/CI usage.
+
+### Manual setup
+
+<details>
+<summary>If you prefer to set things up manually</summary>
+
+#### 1. Clone and configure
+
+```bash
+git clone https://github.com/emanueleielo/ciana-parrot.git
 cd ciana-parrot
 cp .env.example .env
 ```
@@ -64,14 +79,22 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 
 > **Telegram bot token:** Message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, and follow the prompts.
 
-### 2. Build and run
+#### 2. Build and run
 
 ```bash
 make build
 make up
 ```
 
-### 3. Chat
+#### 3. Start the host gateway
+
+```bash
+make gateway
+```
+
+</details>
+
+### Chat
 
 Open your bot on Telegram, send `/start`, and start chatting.
 
