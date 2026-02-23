@@ -10,11 +10,8 @@ from typing import Callable, Optional, Protocol, runtime_checkable
 import telegram.error
 from telegram import (
     BotCommand,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     Update,
 )
-from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -29,11 +26,11 @@ from ...transcription import is_configured as transcription_configured, transcri
 from ..base import AbstractChannel, IncomingMessage, SendResult
 from .formatting import md_to_telegram_html, split_text, strip_html_tags, TELEGRAM_MAX_MESSAGE_LEN
 from .rendering import render_events
+from .tool_details import ToolDetailsManager
 from .utils import typing_indicator
 
 logger = logging.getLogger(__name__)
 MAX_SEEN_UPDATES = 1000
-_MAX_STORED_DETAILS = 50
 
 
 @runtime_checkable
@@ -68,8 +65,7 @@ class TelegramChannel(AbstractChannel):
         self._mode_handlers: list[ModeHandler] = []
         self._mode_handler_factories: list[ModeHandlerFactory] = []
         self._active_tasks: set[asyncio.Task] = set()
-        self._tool_details: dict[str, dict] = {}
-        self._detail_counter = 0
+        self._tool_details_mgr = ToolDetailsManager("td")
 
     def register_mode_handler(self, factory: ModeHandlerFactory) -> None:
         """Register a mode handler factory. Called before start().
@@ -110,7 +106,7 @@ class TelegramChannel(AbstractChannel):
         for handler in self._mode_handlers:
             handler.register()
         self._app.add_handler(CallbackQueryHandler(
-            self._handle_tool_details_callback, pattern=r"^td:"))
+            self._handle_tool_details_callback_wrapper, pattern=r"^td:"))
         self._app.add_handler(
             MessageHandler(
                 (filters.TEXT | filters.VOICE | filters.AUDIO | filters.PHOTO)
@@ -396,18 +392,6 @@ class TelegramChannel(AbstractChannel):
         # Process in background so the handler returns immediately
         self._tracked_task(self._process_message(msg, chat.id))
 
-    def _store_tool_details(self, items: list[str]) -> str:
-        """Store tool detail items and return the lookup key."""
-        self._detail_counter += 1
-        key = str(self._detail_counter)
-        self._tool_details[key] = {"items": items, "msg_ids": []}
-        if len(self._tool_details) > _MAX_STORED_DETAILS:
-            oldest = sorted(self._tool_details, key=int)[
-                :len(self._tool_details) - _MAX_STORED_DETAILS]
-            for k in oldest:
-                del self._tool_details[k]
-        return key
-
     async def _process_message(self, msg: IncomingMessage, chat_id: int) -> None:
         """Process a message in the background."""
         str_chat_id = str(chat_id)
@@ -428,12 +412,8 @@ class TelegramChannel(AbstractChannel):
             # Build inline button for tool details if available
             inline_markup = None
             if tool_detail_items:
-                key = self._store_tool_details(tool_detail_items)
-                inline_markup = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "\U0001f4cb Tool details",
-                        callback_data=f"td:tools:{key}"),
-                ]])
+                key = self._tool_details_mgr.store(tool_detail_items)
+                inline_markup = self._tool_details_mgr.expand_button(key)
 
             await self.send(str_chat_id, compact,
                             reply_to_message_id=msg.message_id,
@@ -443,80 +423,14 @@ class TelegramChannel(AbstractChannel):
             logger.exception("Error processing message from %s", msg.user_id)
             await self.send(str_chat_id, f"Error: {e}")
 
-    async def _handle_tool_details_callback(self, update: Update,
-                                             context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def _handle_tool_details_callback_wrapper(
+            self, update: Update,
+            context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle tool-details expand/collapse callbacks (td: prefix)."""
         query = update.callback_query
-        data = query.data or ""
-        parts = data.split(":")
-
         try:
-            if data.startswith("td:tools:"):
-                key = parts[2]
-                entry = self._tool_details.get(key)
-                if entry and entry.get("items"):
-                    await query.answer()
-                    msg_ids = []
-                    for item_html in entry["items"]:
-                        try:
-                            sent = await self._app.bot.send_message(
-                                chat_id=query.message.chat_id,
-                                text=item_html,
-                                parse_mode="HTML",
-                                disable_notification=True,
-                            )
-                            msg_ids.append(sent.message_id)
-                        except BadRequest:
-                            try:
-                                sent = await self._app.bot.send_message(
-                                    chat_id=query.message.chat_id,
-                                    text=strip_html_tags(item_html),
-                                    disable_notification=True,
-                                )
-                                msg_ids.append(sent.message_id)
-                            except Exception:
-                                logger.warning("Failed to send tool detail")
-                    entry["msg_ids"] = msg_ids
-                    try:
-                        await query.message.edit_reply_markup(
-                            reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton(
-                                    "\u2715 Hide details",
-                                    callback_data=f"td:tclose:{key}"),
-                            ]]))
-                    except Exception:
-                        pass
-                else:
-                    await query.answer("Details no longer available")
-
-            elif data.startswith("td:tclose:"):
-                key = parts[2]
-                entry = self._tool_details.get(key)
-                if entry and entry.get("msg_ids"):
-                    await query.answer()
-                    for mid in entry["msg_ids"]:
-                        try:
-                            await self._app.bot.delete_message(
-                                chat_id=query.message.chat_id,
-                                message_id=mid)
-                        except Exception:
-                            pass
-                    entry["msg_ids"] = []
-                    try:
-                        await query.message.edit_reply_markup(
-                            reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton(
-                                    "\U0001f4cb Tool details",
-                                    callback_data=f"td:tools:{key}"),
-                            ]]))
-                    except Exception:
-                        pass
-                else:
-                    await query.answer()
-
-            else:
-                await query.answer()
-
+            await self._tool_details_mgr.handle_callback(query, self._app.bot)
         except (IndexError, ValueError) as e:
-            logger.warning("Bad tool-details callback data %r: %s", data, e)
+            logger.warning("Bad tool-details callback data %r: %s",
+                           query.data, e)
             await query.answer("Something went wrong")

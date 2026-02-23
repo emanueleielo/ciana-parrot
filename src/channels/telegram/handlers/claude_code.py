@@ -15,7 +15,6 @@ from telegram import (
     ReplyKeyboardRemove,
     Update,
 )
-from telegram.error import BadRequest
 from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
@@ -23,8 +22,9 @@ from telegram.ext import (
 )
 
 from ....bridges.claude_code.bridge import CCResponse
-from ..formatting import md_to_telegram_html, split_text, strip_html_tags, TELEGRAM_MAX_MESSAGE_LEN
+from ..formatting import md_to_telegram_html, split_text, TELEGRAM_MAX_MESSAGE_LEN
 from ..rendering import render_events
+from ..tool_details import ToolDetailsManager
 from ..utils import typing_indicator
 
 logger = logging.getLogger(__name__)
@@ -46,9 +46,6 @@ def _cc_reply_keyboard(project_name: str) -> ReplyKeyboardMarkup:
         is_persistent=True,
         input_field_placeholder=f"Message Claude Code ({project_name})...",
     )
-
-
-_MAX_STORED_DETAILS = 50
 
 
 def _render_cc_response(cc_resp: CCResponse) -> tuple[str, list[str]]:
@@ -77,8 +74,7 @@ class ClaudeCodeHandler:
         self._app = app
         self._send = send_fn
         self._user_locks: dict[str, asyncio.Lock] = {}
-        self._tool_details: dict[str, dict] = {}  # key -> {"items": list[str], "msg_ids": list[int]}
-        self._detail_counter = 0
+        self._tool_details_mgr = ToolDetailsManager("cc")
         # Pagination caches (keyed by user_id)
         self._projects_cache: dict[str, list] = {}
         self._conversations_cache: dict[str, list] = {}
@@ -131,18 +127,6 @@ class ClaudeCodeHandler:
         lock = self._user_locks.setdefault(user_id, asyncio.Lock())
         async with lock:
             await self._process_message_locked(user_id, text, chat_id)
-
-    def _store_tool_details(self, items: list[str]) -> str:
-        """Store tool detail items and return the lookup key."""
-        self._detail_counter += 1
-        key = str(self._detail_counter)
-        self._tool_details[key] = {"items": items, "msg_ids": []}
-        if len(self._tool_details) > _MAX_STORED_DETAILS:
-            oldest = sorted(self._tool_details, key=int)[
-                :len(self._tool_details) - _MAX_STORED_DETAILS]
-            for k in oldest:
-                del self._tool_details[k]
-        return key
 
     # --- cc: command dispatch ---
 
@@ -319,12 +303,8 @@ class ClaudeCodeHandler:
                 # Build inline button for tool details if available
                 inline_markup = None
                 if tool_detail_items:
-                    key = self._store_tool_details(tool_detail_items)
-                    inline_markup = InlineKeyboardMarkup([[
-                        InlineKeyboardButton(
-                            "\U0001f4cb Tool details",
-                            callback_data=f"cc:tools:{key}"),
-                    ]])
+                    key = self._tool_details_mgr.store(tool_detail_items)
+                    inline_markup = self._tool_details_mgr.expand_button(key)
 
                 converted = md_to_telegram_html(compact)
                 chunks = split_text(converted, TELEGRAM_MAX_MESSAGE_LEN)
@@ -597,68 +577,9 @@ class ClaudeCodeHandler:
                 await self._start_new_conversation(query.message, user_id,
                                                     int(parts[2]))
 
-            elif data.startswith("cc:tools:"):
-                key = parts[2]
-                entry = self._tool_details.get(key)
-                if entry and entry.get("items"):
-                    await query.answer()
-                    msg_ids = []
-                    for item_html in entry["items"]:
-                        try:
-                            msg = await self._app.bot.send_message(
-                                chat_id=query.message.chat_id,
-                                text=item_html,
-                                parse_mode="HTML",
-                                disable_notification=True,
-                            )
-                            msg_ids.append(msg.message_id)
-                        except BadRequest:
-                            try:
-                                msg = await self._app.bot.send_message(
-                                    chat_id=query.message.chat_id,
-                                    text=strip_html_tags(item_html),
-                                    disable_notification=True,
-                                )
-                                msg_ids.append(msg.message_id)
-                            except Exception:
-                                logger.warning("Failed to send tool detail")
-                    entry["msg_ids"] = msg_ids
-                    try:
-                        await query.message.edit_reply_markup(
-                            reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton(
-                                    "\u2715 Hide details",
-                                    callback_data=f"cc:tclose:{key}"),
-                            ]]))
-                    except Exception:
-                        pass
-                else:
-                    await query.answer("Details no longer available")
-
-            elif data.startswith("cc:tclose:"):
-                key = parts[2]
-                entry = self._tool_details.get(key)
-                if entry and entry.get("msg_ids"):
-                    await query.answer()
-                    for mid in entry["msg_ids"]:
-                        try:
-                            await self._app.bot.delete_message(
-                                chat_id=query.message.chat_id,
-                                message_id=mid)
-                        except Exception:
-                            pass
-                    entry["msg_ids"] = []
-                    try:
-                        await query.message.edit_reply_markup(
-                            reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton(
-                                    "\U0001f4cb Tool details",
-                                    callback_data=f"cc:tools:{key}"),
-                            ]]))
-                    except Exception:
-                        pass
-                else:
-                    await query.answer()
+            elif data.startswith("cc:tools:") or data.startswith("cc:tclose:"):
+                if await self._tool_details_mgr.handle_callback(query, self._app.bot):
+                    return
 
             elif data == "cc:convs_menu":
                 await query.answer("Loading conversations\u2026")
