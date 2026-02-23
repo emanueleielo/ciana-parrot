@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.bridges.claude_code.bridge import ClaudeCodeBridge, CCResponse
+from src.gateway.bridges.claude_code.bridge import ClaudeCodeBridge, CCResponse
 from src.events import (
     TextEvent, ToolCallEvent, ThinkingEvent,
     summarize_tool_input, extract_tool_result_text,

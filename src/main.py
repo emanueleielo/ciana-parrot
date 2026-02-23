@@ -4,9 +4,10 @@ import asyncio
 import logging
 import signal
 
-from .bridges.claude_code import setup_bridge
+from .gateway.bridges.claude_code import setup_bridge
 from .config import load_config
 from .agent import create_cianaparrot_agent
+from .middleware import init_middleware_bridges
 from .router import MessageRouter
 from .scheduler import Scheduler
 from .channels.telegram import TelegramChannel
@@ -25,6 +26,10 @@ async def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     logger.info("CianaParrot starting...")
+
+    # Initialize bridge availability for skill filtering
+    if config.gateway.enabled:
+        init_middleware_bridges(config.gateway)
 
     # Create agent
     agent, checkpointer, mcp_client = await create_cianaparrot_agent(config)

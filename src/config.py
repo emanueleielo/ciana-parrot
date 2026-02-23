@@ -136,10 +136,27 @@ class TranscriptionConfig(BaseModel):
         return v
 
 
+class BridgeDefinition(BaseModel):
+    allowed_commands: list[str] = Field(default_factory=list)
+
+
+class GatewayConfig(BaseModel):
+    enabled: bool = False
+    url: Optional[str] = None
+    token: Optional[str] = None
+    port: int = 9842
+    default_timeout: int = 30
+    bridges: dict[str, BridgeDefinition] = Field(default_factory=dict)
+
+    @field_validator("url", "token", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Optional[str]:
+        return _empty_str_to_none(v)
+
+
 class ClaudeCodeConfig(BaseModel):
     enabled: bool = False
     bridge_url: Optional[str] = None
-    bridge_port: int = 9842
     bridge_token: Optional[str] = None
     projects_dir: str = "~/.claude/projects"
     permission_mode: Optional[str] = None
@@ -174,6 +191,7 @@ class AppConfig(BaseModel):
     skills: SkillsConfig = Field(default_factory=SkillsConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     transcription: TranscriptionConfig = Field(default_factory=TranscriptionConfig)
+    gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     claude_code: ClaudeCodeConfig = Field(default_factory=ClaudeCodeConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 

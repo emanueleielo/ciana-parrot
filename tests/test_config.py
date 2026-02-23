@@ -246,12 +246,10 @@ class TestBridgeDefinition:
     def test_defaults(self):
         bd = BridgeDefinition()
         assert bd.allowed_commands == []
-        assert bd.description == ""
 
     def test_with_values(self):
-        bd = BridgeDefinition(allowed_commands=["memo", "note"], description="Notes")
+        bd = BridgeDefinition(allowed_commands=["memo", "note"])
         assert bd.allowed_commands == ["memo", "note"]
-        assert bd.description == "Notes"
 
 
 class TestClaudeCodeConfig:

@@ -16,7 +16,7 @@ async def setup_bridge(config, channel) -> None:
         return
 
     # Lazy import to avoid circular deps: handler → channel → __init__
-    from ...channels.telegram.handlers.claude_code import ClaudeCodeHandler
+    from ....channels.telegram.handlers.claude_code import ClaudeCodeHandler
 
     bridge = ClaudeCodeBridge(config)
     available, version = await bridge.check_available()

@@ -1,4 +1,4 @@
-"""Patches for DeepAgents middleware — robust YAML frontmatter parsing + env filtering."""
+"""Patches for DeepAgents middleware — robust YAML frontmatter parsing + env/bridge filtering."""
 
 import logging
 import os
@@ -14,9 +14,20 @@ _original_parse = _skills_mod._parse_skill_metadata
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
+# Available bridges, set by init_middleware_bridges()
+_available_bridges: set[str] = set()
 
-def _extract_requires_env(content):
-    """Extract requires_env from raw YAML frontmatter before DeepAgents strips it."""
+
+def init_middleware_bridges(gateway_config) -> None:
+    """Initialize bridge availability for skill filtering."""
+    global _available_bridges
+    _available_bridges = set(gateway_config.bridges.keys())
+    if _available_bridges:
+        logger.info("Middleware bridges available: %s", ", ".join(sorted(_available_bridges)))
+
+
+def _extract_frontmatter_field(content, field):
+    """Extract a single field from raw YAML frontmatter."""
     match = _FRONTMATTER_RE.match(content)
     if not match:
         return None
@@ -26,7 +37,12 @@ def _extract_requires_env(content):
         return None
     if not isinstance(meta, dict):
         return None
-    return meta.get("requires_env")
+    return meta.get(field)
+
+
+def _extract_requires_env(content):
+    """Extract requires_env from raw YAML frontmatter before DeepAgents strips it."""
+    return _extract_frontmatter_field(content, "requires_env")
 
 
 def _check_env_requirements(requires, skill_name):
@@ -46,16 +62,43 @@ def _check_env_requirements(requires, skill_name):
     return True
 
 
+def _extract_requires_bridge(content):
+    """Extract requires_bridge from raw YAML frontmatter."""
+    return _extract_frontmatter_field(content, "requires_bridge")
+
+
+def _check_bridge_requirements(requires, skill_name):
+    """Return False if required bridges are not available."""
+    if not requires:
+        return True
+    if isinstance(requires, str):
+        requires = [requires]
+    missing = [b for b in requires if b not in _available_bridges]
+    if missing:
+        logger.debug(
+            "Skill '%s' skipped — missing bridge: %s",
+            skill_name,
+            ", ".join(missing),
+        )
+        return False
+    return True
+
+
 def _robust_parse_skill_metadata(content, skill_path, directory_name):
     """Parse skill metadata with fallback for unquoted YAML values.
 
-    Also filters out skills whose ``requires_env`` vars are not set.
+    Also filters out skills whose ``requires_env`` vars are not set
+    or whose ``requires_bridge`` bridges are not available.
     DeepAgents strips custom frontmatter fields, so we extract
-    ``requires_env`` ourselves from the raw YAML before delegating.
+    them ourselves from the raw YAML before delegating.
     """
-    # Pre-check: extract requires_env from raw content before DeepAgents drops it
+    # Pre-check: extract requires_env and requires_bridge from raw content
     requires = _extract_requires_env(content)
     if not _check_env_requirements(requires, directory_name):
+        return None
+
+    bridge_requires = _extract_requires_bridge(content)
+    if not _check_bridge_requirements(bridge_requires, directory_name):
         return None
 
     result = _original_parse(content, skill_path, directory_name)

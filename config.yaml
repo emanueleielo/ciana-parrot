@@ -49,11 +49,46 @@ transcription:
   api_key: "${OPENAI_API_KEY}"
   timeout: 30
 
+gateway:
+  enabled: true
+  url: "http://host.docker.internal:9842"
+  token: "${GATEWAY_TOKEN}"
+  port: 9842
+  default_timeout: 30
+  bridges:
+    claude-code:
+      allowed_commands: ["claude"]
+    apple-reminders:
+      allowed_commands: ["remindctl"]
+    things:
+      allowed_commands: ["things"]
+    spotify:
+      allowed_commands: ["spogo"]
+    sonos:
+      allowed_commands: ["sonos"]
+    imessage:
+      allowed_commands: ["imsg"]
+    bear-notes:
+      allowed_commands: ["grizzly"]
+    obsidian:
+      allowed_commands: ["obsidian-cli"]
+    openhue:
+      allowed_commands: ["openhue"]
+    camsnap:
+      allowed_commands: ["camsnap"]
+    peekaboo:
+      allowed_commands: ["peekaboo"]
+    blucli:
+      allowed_commands: ["blu"]
+    whatsapp:
+      allowed_commands: ["wacli"]
+    1password:
+      allowed_commands: ["op"]
+
 claude_code:
   enabled: true
-  bridge_url: "http://host.docker.internal:9842"    # Host bridge for Claude Code execution
-  bridge_port: 9842                                  # Port the host bridge listens on
-  bridge_token: "${CC_BRIDGE_TOKEN}"                 # Auth token (must match server.py)
+  bridge_url: "http://host.docker.internal:9842"    # Host gateway for Claude Code execution
+  bridge_token: "${CC_BRIDGE_TOKEN}"                 # Auth token (must match gateway)
   projects_dir: "/app/.claude-projects"              # Mounted read-only from host ~/.claude/projects
   permission_mode: "bypassPermissions"               # Auto-approve (non-interactive -p mode)
   timeout: 0                                         # 0 = no timeout (wait indefinitely)

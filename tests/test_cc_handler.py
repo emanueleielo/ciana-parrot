@@ -18,7 +18,7 @@ from src.channels.telegram.handlers.claude_code import (
     CC_BTN_CONVERSATIONS,
     CC_PAGE_SIZE,
 )
-from src.bridges.claude_code.bridge import (
+from src.gateway.bridges.claude_code.bridge import (
     CCResponse, UserSession, ConversationInfo, ProjectInfo,
 )
 from src.events import TextEvent, ToolCallEvent, ThinkingEvent

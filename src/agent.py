@@ -13,6 +13,7 @@ from . import middleware as _middleware  # noqa: F401 — patches skill YAML par
 from .config import AppConfig
 from .tools.web import web_search, web_fetch, init_web_tools
 from .tools.cron import schedule_task, list_tasks, cancel_task, init_cron_tools
+from .tools.host import host_execute, init_host_tools
 from .transcription import init_transcription
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ async def create_cianaparrot_agent(config: AppConfig):
     # Initialize tool configs
     init_web_tools(config.web)
     init_cron_tools(config.scheduler)
+    if config.gateway.enabled:
+        init_host_tools(config.gateway)
 
     # Initialize transcription if enabled
     if config.transcription.enabled:
@@ -72,6 +75,8 @@ async def create_cianaparrot_agent(config: AppConfig):
 
     # Custom tools
     custom_tools = [web_search, web_fetch, schedule_task, list_tasks, cancel_task]
+    if config.gateway.enabled:
+        custom_tools.append(host_execute)
 
     # MCP tools
     mcp_client = None
