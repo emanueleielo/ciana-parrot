@@ -29,7 +29,7 @@ CianaParrot is a self-hosted AI personal assistant that runs on your own infrast
 **Key features:**
 - **Multi-provider LLM** — Anthropic, OpenAI, Google Gemini, Groq, Ollama, OpenRouter, vLLM
 - **Multi-channel** — Pluggable architecture, Telegram out of the box
-- **Host bridge system** — Sandboxed in Docker, connected to your OS. Controlled gateways to host apps and tools — Claude Code built in, Apple Notes / Calendar / HomeKit and more coming
+- **Host gateway system** — Sandboxed in Docker, connected to your OS via a secure gateway. Each bridge exposes only allowed CLI commands — Spotify, Reminders, iMessage, Things, Bear Notes, Obsidian, 1Password, HomeKit, and more
 - **Scheduled tasks** — Cron, interval, and one-shot tasks
 - **Web tools** — Search (Brave / DuckDuckGo) and URL fetching built in
 - **Skills system** — Add a folder in `skills/` with a `SKILL.md` and a `skill.py`, and it auto-registers
@@ -90,6 +90,7 @@ cianaparrot/
 │   ├── agent_response.py    # Response extraction from LangGraph messages
 │   ├── config.py            # YAML loader with ${ENV_VAR} expansion
 │   ├── events.py            # Shared event types (tool calls, thinking, text)
+│   ├── middleware.py         # Skill filtering (env vars, bridge requirements)
 │   ├── router.py            # Trigger detection, auth, thread mapping
 │   ├── scheduler.py         # Cron/interval/once task runner
 │   ├── store.py             # JSON file-backed key-value store
@@ -103,13 +104,16 @@ cianaparrot/
 │   │       ├── utils.py     # Typing indicator
 │   │       └── handlers/
 │   │           └── claude_code.py  # Claude Code mode handler
-│   ├── bridges/
-│   │   └── claude_code/
-│   │       ├── bridge.py    # CC session management, CLI execution, NDJSON parsing
-│   │       └── server.py    # Host-side HTTP bridge server
+│   ├── gateway/
+│   │   ├── server.py        # Host-side HTTP gateway server (runs on host)
+│   │   ├── client.py        # Gateway HTTP client (used by agent inside Docker)
+│   │   └── bridges/
+│   │       └── claude_code/
+│   │           └── bridge.py# CC session management, CLI execution, NDJSON parsing
 │   └── tools/
 │       ├── web.py           # Web search + URL fetch
-│       └── cron.py          # Schedule/list/cancel tasks
+│       ├── cron.py          # Schedule/list/cancel tasks
+│       └── host.py          # host_execute tool (gateway bridge commands)
 ├── workspace/
 │   ├── IDENTITY.md          # Agent persona (name, tone, style)
 │   ├── AGENT.md             # Behavioral instructions
@@ -233,85 +237,90 @@ logging:
   level: "INFO"                  # DEBUG | INFO | WARNING | ERROR
 ```
 
-## Host Bridge System
+## Host Gateway System
 
 CianaParrot runs inside a Docker container — it can't see your filesystem, can't launch your apps, can't touch your OS. That's the point. The agent is sandboxed by default.
 
-**Bridges** are controlled gateways that connect the sandboxed agent to specific host capabilities. Each bridge exposes only the operations you explicitly allow — nothing more.
+The **gateway** is a lightweight HTTP server that runs on the host and connects the sandboxed agent to specific host capabilities. Each **bridge** is a named connector that exposes only the CLI commands you explicitly allow — nothing more.
 
 ```
-Docker Container (sandboxed)         Host (macOS/Linux)
-┌──────────────────────────┐    ┌──────────────────────────┐
-│  CianaParrot Agent       │◄──►│  Bridge: Claude Code  ✓  │
-│                          │    │  Bridge: Apple Notes  ◎  │
-│  Can't see the host OS   │    │  Bridge: Calendar     ◎  │
-│  Can't escape the sandbox│    │  Bridge: HomeKit      ◎  │
-└──────────────────────────┘    └──────────────────────────┘
-                                 ✓ = built in  ◎ = coming
+Docker Container (sandboxed)              Host (macOS/Linux)
+┌─────────────────────────────┐    ┌─────────────────────────────────┐
+│  CianaParrot Agent          │    │  Host Gateway (port 9842)       │
+│                             │    │  ┌───────────────────────────┐  │
+│  host_execute(bridge, cmd)──│───►│  │ claude-code  → claude     │  │
+│                             │    │  │ spotify      → spogo      │  │
+│  Can't see the host OS      │    │  │ apple-reminders → remindctl│  │
+│  Can't escape the sandbox   │    │  │ imessage     → imsg       │  │
+│                             │    │  │ whatsapp     → wacli      │  │
+│                             │    │  │ ... 14 bridges total       │  │
+│                             │    │  └───────────────────────────┘  │
+└─────────────────────────────┘    └─────────────────────────────────┘
 ```
 
-This is the opposite of assistants that run natively on your machine with full OS access. A prompt injection against CianaParrot can't compromise your entire system — only what the active bridge allows, and only the operations that bridge exposes.
+A prompt injection against CianaParrot can't compromise your entire system — only the specific CLI commands allowed by the active bridge's allowlist.
 
-### Future bridges
+### Available bridges
 
-| Bridge | Description |
-|--------|-------------|
-| **Apple Notes** | Read, search, and create notes via the Notes app |
-| **Calendar** | Query and create events in Apple Calendar |
-| **Reminders** | Manage Apple Reminders lists and items |
-| **HomeKit** | Control smart home devices and scenes |
-| **Obsidian** | Read and write to your Obsidian vault |
-| **1Password** | Look up credentials (read-only, no secrets in chat) |
-| **Spotify** | Playback control and queue management |
+| Bridge | CLI | Description |
+|--------|-----|-------------|
+| `claude-code` | `claude` | Claude Code sessions (Telegram `/cc` mode) |
+| `spotify` | `spogo` | Playback control and queue management |
+| `apple-reminders` | `remindctl` | Manage Apple Reminders lists and items |
+| `things` | `things` | Things 3 task management |
+| `imessage` | `imsg` | Send and read iMessages |
+| `whatsapp` | `wacli` | WhatsApp messaging |
+| `bear-notes` | `grizzly` | Bear notes app |
+| `obsidian` | `obsidian-cli` | Read and write to your Obsidian vault |
+| `sonos` | `sonos` | Sonos speaker control |
+| `openhue` | `openhue` | Philips Hue smart lights |
+| `camsnap` | `camsnap` | Camera snapshots |
+| `peekaboo` | `peekaboo` | Screen capture |
+| `blucli` | `blu` | Bluetooth device control |
+| `1password` | `op` | Look up credentials (read-only) |
 
 ### How it works
 
-1. The user enters a **mode** in Telegram (e.g., `/cc` for Claude Code)
-2. Messages are intercepted by the mode handler instead of going to the main agent
-3. The mode handler calls the bridge, which makes an HTTP request to the host
-4. The host bridge server executes the CLI command and returns the output
-5. The response is parsed and rendered back in Telegram with tool details, thinking indicators, and sub-agent collapsing
+The agent calls `host_execute(bridge="spotify", command="spogo status")` which sends an HTTP request to the gateway on the host. The gateway validates the command against the bridge's allowlist, executes it, and returns `{stdout, stderr, returncode}`.
 
-### Claude Code Bridge
+For Claude Code, a dedicated Telegram mode (`/cc`) provides interactive sessions with project/conversation selection, streaming output, and tool-call rendering.
 
-#### Setup
+Skills declare `requires_bridge: "spotify"` in their YAML frontmatter — skills are automatically hidden when their required bridge isn't configured.
 
-1. **Install Claude Code** on the host machine ([installation guide](https://docs.anthropic.com/en/docs/claude-code))
+### Setup
 
-2. **Add a bridge token** to `.env`:
+1. **Add a gateway token** to `.env`:
    ```
-   CC_BRIDGE_TOKEN=any-secret-string-you-choose
+   GATEWAY_TOKEN=any-secret-string-you-choose
    ```
 
-3. **Enable in `config.yaml`**:
+2. **Configure bridges** in `config.yaml`:
    ```yaml
-   claude_code:
+   gateway:
      enabled: true
-     bridge_url: "http://host.docker.internal:9842"
-     bridge_port: 9842
-     bridge_token: "${CC_BRIDGE_TOKEN}"
-     projects_dir: "/app/.claude-projects"
-     permission_mode: "bypassPermissions"
-     timeout: 0                    # 0 = no timeout
+     url: "http://host.docker.internal:9842"
+     token: "${GATEWAY_TOKEN}"
+     port: 9842
+     bridges:
+       spotify:
+         allowed_commands: ["spogo"]
+       apple-reminders:
+         allowed_commands: ["remindctl"]
    ```
 
-4. **Mount Claude projects** in `docker-compose.yml` (read-only, for project listing):
-   ```yaml
-   volumes:
-     - ~/.claude/projects:/app/.claude-projects:ro
-   ```
+3. **Install the CLI tools** on the host (e.g., `brew install steipete/tap/spogo`)
 
-5. **Start the bridge** on the host:
+4. **Start the gateway** on the host:
    ```bash
-   make bridge-cc
+   make gateway
    ```
 
-6. **Restart the bot**:
+5. **Restart the bot**:
    ```bash
    make restart
    ```
 
-#### Usage
+### Claude Code mode
 
 | Command | Description |
 |---------|-------------|
@@ -323,20 +332,13 @@ Once in CC mode:
 - **Pick a conversation** to resume, or start a new one
 - **Send messages** directly — they go to Claude Code instead of the main agent
 - **Tool details** button expands to show each tool call with its output
-- A persistent reply keyboard provides quick access to **Conversations** and **Exit CC**
 
-The display groups consecutive tool calls (e.g., "Read 3 calls"), collapses sub-agent activity to a single line, and shows per-tool icons for readability.
+### Adding a new bridge
 
-### Adding a New Bridge
-
-To integrate another host-side tool:
-
-1. **Create a bridge module** in `src/bridges/your_tool/` — manages sessions and communicates with the host bridge server
-2. **Create a mode handler** in `src/channels/telegram/handlers/` — implements the `ModeHandler` protocol (see `src/channels/telegram/channel.py`)
-3. **Add a config section** in `config.yaml` and a Pydantic model in `src/config.py`
-4. **Wire it up** in `src/main.py` via `channel.register_mode_handler()`
-
-The existing HTTP bridge server (`server.py`) is generic — it accepts any `{cmd, cwd, timeout}` payload and returns `{stdout, stderr, returncode}`. You can reuse it as-is or extend it with new endpoints.
+1. Install the CLI tool on the host
+2. Add a bridge entry in `config.yaml` under `gateway.bridges` with the CLI command in `allowed_commands`
+3. Create a skill in `skills/your-bridge/SKILL.md` with `requires_bridge: "your-bridge"` in the frontmatter
+4. Restart the bot — the skill auto-registers and the gateway allows the command
 
 ## Skills
 
@@ -404,7 +406,7 @@ make logs       # Follow logs
 make restart    # Rebuild and restart
 make shell      # Shell into container
 make test       # Run test suite (pytest)
-make bridge-cc  # Start Claude Code bridge on host (port 9842)
+make gateway    # Start host gateway on port 9842
 ```
 
 ## Host Filesystem Access

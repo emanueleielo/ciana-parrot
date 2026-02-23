@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.bridges.claude_code.bridge import ClaudeCodeBridge, UserSession
+from src.gateway.bridges.claude_code.bridge import ClaudeCodeBridge, UserSession
 from src.config import AppConfig, ClaudeCodeConfig
 
 

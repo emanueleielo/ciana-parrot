@@ -21,7 +21,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from ....bridges.claude_code.bridge import CCResponse
+from ....gateway.bridges.claude_code.bridge import CCResponse
 from ..formatting import md_to_telegram_html, split_text, TELEGRAM_MAX_MESSAGE_LEN
 from ..rendering import render_events
 from ..tool_details import ToolDetailsManager

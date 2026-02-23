@@ -12,15 +12,15 @@ from typing import Optional
 
 import httpx
 
-from ...config import AppConfig
-from ...events import (
+from ....config import AppConfig
+from ....events import (
     TextEvent,
     ThinkingEvent,
     ToolCallEvent,
     extract_tool_result_text,
     summarize_tool_input,
 )
-from ...store import JsonStore
+from ....store import JsonStore
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +85,13 @@ class ClaudeCodeBridge:
 
     def __init__(self, config: AppConfig):
         cc = config.claude_code
+        gw = config.gateway
         self._claude_path = cc.claude_path
         self._projects_dir = Path(os.path.expanduser(cc.projects_dir))
         self._timeout = cc.timeout
         self._permission_mode = cc.permission_mode
-        self._bridge_url = cc.bridge_url
-        self._bridge_token = cc.bridge_token
+        self._bridge_url = cc.bridge_url or gw.url
+        self._bridge_token = cc.bridge_token or gw.token
         self._store = JsonStore(cc.state_file)
         self._user_states: dict[str, UserSession] = {}
         self._restore_states()
@@ -273,13 +274,16 @@ class ClaudeCodeBridge:
             async with httpx.AsyncClient(timeout=http_timeout) as client:
                 resp = await client.post(
                     f"{self._bridge_url}/execute",
-                    json={"cmd": cmd, "cwd": cwd, "timeout": self._timeout},
+                    json={"bridge": "claude-code", "cmd": cmd, "cwd": cwd, "timeout": self._timeout},
                     headers=headers,
                 )
             if resp.status_code == 401:
-                return CCResponse(error="Bridge auth failed. Check CC_BRIDGE_TOKEN.")
+                return CCResponse(error="Gateway auth failed. Check GATEWAY_TOKEN.")
+            if resp.status_code == 403:
+                data = resp.json()
+                return CCResponse(error=data.get("error", "Command not allowed by gateway (403)"))
             if not resp.is_success:
-                return CCResponse(error=f"Bridge returned HTTP {resp.status_code}")
+                return CCResponse(error=f"Gateway returned HTTP {resp.status_code}")
             data = resp.json()
         except httpx.ConnectError:
             return CCResponse(error="Cannot connect to Claude Code bridge. Is the bridge server running?")
@@ -352,9 +356,12 @@ class ClaudeCodeBridge:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{self._bridge_url}/health", headers=headers)
             if resp.status_code == 200:
-                version = resp.json().get("claude", "unknown")
-                return True, f"Bridge OK — {version}"
-            return False, f"Bridge returned {resp.status_code}"
+                data = resp.json()
+                bridges = data.get("bridges", [])
+                if "claude-code" not in bridges:
+                    return False, "Gateway reachable but claude-code bridge not registered"
+                return True, f"Gateway OK — bridges: {', '.join(bridges)}"
+            return False, f"Gateway returned {resp.status_code}"
         except httpx.ConnectError:
             return False, "Cannot connect to Claude Code bridge"
         except Exception as e:

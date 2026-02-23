@@ -1,6 +1,6 @@
 """Tests for _render_cc_response — compact + details output."""
 
-from src.bridges.claude_code.bridge import (
+from src.gateway.bridges.claude_code.bridge import (
     CCResponse,
     TextEvent,
     ThinkingEvent,

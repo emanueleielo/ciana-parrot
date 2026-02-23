@@ -8,9 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
-from src.bridges.claude_code.bridge import (
+from src.gateway.bridges.claude_code.bridge import (
     CCResponse,
     ClaudeCodeBridge,
     ConversationInfo,
@@ -20,7 +21,6 @@ from src.bridges.claude_code.bridge import (
 )
 from src.config import AppConfig, ClaudeCodeConfig
 from src.events import TextEvent, ThinkingEvent, ToolCallEvent
-from src.gateway.client import GatewayClient, GatewayResult
 
 
 @pytest.fixture
@@ -247,25 +247,36 @@ class TestCleanPreview:
 
 class TestExecutionRouting:
     @pytest.mark.asyncio
-    async def test_routes_to_gateway_when_set(self, tmp_path):
-        gateway = AsyncMock(spec=GatewayClient)
-        gateway.execute = AsyncMock(return_value=GatewayResult(
-            stdout='{"type":"result","result":"ok"}',
-            returncode=0,
-        ))
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_routes_to_bridge_when_set(self, MockClient, tmp_path):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {
+            "stdout": '{"type":"result","result":"ok"}',
+            "stderr": "",
+            "returncode": 0,
+        }
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post = AsyncMock(return_value=mock_response)
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client_instance
+
         config = AppConfig(
             claude_code=ClaudeCodeConfig(
+                bridge_url="http://localhost:9842",
                 state_file=str(tmp_path / "cc_states.json"),
                 projects_dir=str(tmp_path / "projects"),
             ),
         )
-        bridge = ClaudeCodeBridge(config, gateway_client=gateway)
+        bridge = ClaudeCodeBridge(config)
         result = await bridge._execute_command(["claude", "-p", "hi"], "/path")
-        gateway.execute.assert_called_once()
+        mock_client_instance.post.assert_called_once()
         assert result.error == ""
 
     @pytest.mark.asyncio
-    @patch("src.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
+    @patch("src.gateway.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
     async def test_routes_to_local_when_no_gateway(self, mock_exec, bridge):
         mock_proc = AsyncMock()
         mock_proc.communicate = AsyncMock(
@@ -282,58 +293,81 @@ class TestExecutionRouting:
 # _execute_via_gateway
 # ---------------------------------------------------------------------------
 
-class TestExecuteViaGateway:
+class TestExecuteViaBridge:
     @pytest.fixture
-    def gw_bridge(self, tmp_path):
-        gateway = AsyncMock(spec=GatewayClient)
+    def bridge_with_url(self, tmp_path):
         config = AppConfig(
             claude_code=ClaudeCodeConfig(
+                bridge_url="http://localhost:9842",
                 state_file=str(tmp_path / "cc_states.json"),
                 projects_dir=str(tmp_path / "projects"),
             ),
         )
-        bridge = ClaudeCodeBridge(config, gateway_client=gateway)
-        return bridge, gateway
+        return ClaudeCodeBridge(config)
+
+    def _mock_httpx(self, MockClient, response):
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+        return mock_client
 
     @pytest.mark.asyncio
-    async def test_success(self, gw_bridge):
-        bridge, gateway = gw_bridge
-        gateway.execute = AsyncMock(return_value=GatewayResult(
-            stdout='{"type":"result","result":"ok"}',
-            returncode=0,
-        ))
-        result = await bridge._execute_via_gateway(["cmd"], "/path")
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_success(self, MockClient, bridge_with_url):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.is_success = True
+        resp.json.return_value = {
+            "stdout": '{"type":"result","result":"ok"}',
+            "stderr": "",
+            "returncode": 0,
+        }
+        self._mock_httpx(MockClient, resp)
+        result = await bridge_with_url._execute_via_bridge(["cmd"], "/path")
         assert result.error == ""
         assert len(result.events) >= 1
 
     @pytest.mark.asyncio
-    async def test_gateway_error(self, gw_bridge):
-        bridge, gateway = gw_bridge
-        gateway.execute = AsyncMock(return_value=GatewayResult(
-            error="connection failed",
-        ))
-        result = await bridge._execute_via_gateway(["cmd"], "/path")
-        assert "connection failed" in result.error
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_bridge_connect_error(self, MockClient, bridge_with_url):
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("connection failed"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+        result = await bridge_with_url._execute_via_bridge(["cmd"], "/path")
+        assert "Cannot connect" in result.error
 
     @pytest.mark.asyncio
-    async def test_nonzero_returncode(self, gw_bridge):
-        bridge, gateway = gw_bridge
-        gateway.execute = AsyncMock(return_value=GatewayResult(
-            stderr="error msg",
-            returncode=1,
-        ))
-        result = await bridge._execute_via_gateway(["cmd"], "/path")
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_nonzero_returncode(self, MockClient, bridge_with_url):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.is_success = True
+        resp.json.return_value = {
+            "stdout": "",
+            "stderr": "error msg",
+            "returncode": 1,
+        }
+        self._mock_httpx(MockClient, resp)
+        result = await bridge_with_url._execute_via_bridge(["cmd"], "/path")
         assert "error msg" in result.error
 
     @pytest.mark.asyncio
-    async def test_empty_stdout(self, gw_bridge):
-        bridge, gateway = gw_bridge
-        gateway.execute = AsyncMock(return_value=GatewayResult(
-            stdout="",
-            stderr="",
-            returncode=0,
-        ))
-        result = await bridge._execute_via_gateway(["cmd"], "/path")
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_empty_stdout(self, MockClient, bridge_with_url):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.is_success = True
+        resp.json.return_value = {
+            "stdout": "",
+            "stderr": "",
+            "returncode": 0,
+        }
+        self._mock_httpx(MockClient, resp)
+        result = await bridge_with_url._execute_via_bridge(["cmd"], "/path")
         assert result.error == ""
         assert any(
             isinstance(e, TextEvent) and "(empty response)" in e.text
@@ -347,7 +381,7 @@ class TestExecuteViaGateway:
 
 class TestExecuteLocal:
     @pytest.mark.asyncio
-    @patch("src.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
+    @patch("src.gateway.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
     async def test_success(self, mock_exec, bridge):
         mock_proc = AsyncMock()
         mock_proc.communicate = AsyncMock(
@@ -361,7 +395,7 @@ class TestExecuteLocal:
         assert any(isinstance(e, TextEvent) for e in result.events)
 
     @pytest.mark.asyncio
-    @patch("src.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
+    @patch("src.gateway.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
     async def test_timeout(self, mock_exec, tmp_path):
         config = AppConfig(
             claude_code=ClaudeCodeConfig(
@@ -380,7 +414,7 @@ class TestExecuteLocal:
         assert "timed out" in result.error.lower()
 
     @pytest.mark.asyncio
-    @patch("src.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
+    @patch("src.gateway.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
     async def test_nonzero_exit(self, mock_exec, bridge):
         mock_proc = AsyncMock()
         mock_proc.communicate = AsyncMock(
@@ -396,40 +430,60 @@ class TestExecuteLocal:
 # _check_gateway
 # ---------------------------------------------------------------------------
 
-class TestCheckGateway:
+class TestCheckBridge:
+    def _mock_httpx_get(self, MockClient, response):
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_client
+        return mock_client
+
     @pytest.mark.asyncio
-    async def test_ok_with_cc_bridge(self, tmp_path):
-        gateway = AsyncMock(spec=GatewayClient)
-        gateway.health = AsyncMock(
-            return_value=(True, {"bridges": ["claude-code", "other"]})
-        )
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_ok_with_cc_bridge(self, MockClient, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "status": "ok",
+            "bridges": ["claude-code", "other"],
+        }
+        self._mock_httpx_get(MockClient, resp)
+
         config = AppConfig(
             claude_code=ClaudeCodeConfig(
+                bridge_url="http://localhost:9842",
                 state_file=str(tmp_path / "cc_states.json"),
                 projects_dir=str(tmp_path / "projects"),
             ),
         )
-        bridge = ClaudeCodeBridge(config, gateway_client=gateway)
-        ok, msg = await bridge._check_gateway()
+        bridge = ClaudeCodeBridge(config)
+        ok, msg = await bridge._check_bridge()
         assert ok is True
         assert "Gateway OK" in msg
 
     @pytest.mark.asyncio
-    async def test_no_cc_bridge(self, tmp_path):
-        gateway = AsyncMock(spec=GatewayClient)
-        gateway.health = AsyncMock(
-            return_value=(True, {"bridges": ["other"]})
-        )
+    @patch("src.gateway.bridges.claude_code.bridge.httpx.AsyncClient")
+    async def test_no_cc_bridge(self, MockClient, tmp_path):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "status": "ok",
+            "bridges": ["other"],
+        }
+        self._mock_httpx_get(MockClient, resp)
+
         config = AppConfig(
             claude_code=ClaudeCodeConfig(
+                bridge_url="http://localhost:9842",
                 state_file=str(tmp_path / "cc_states.json"),
                 projects_dir=str(tmp_path / "projects"),
             ),
         )
-        bridge = ClaudeCodeBridge(config, gateway_client=gateway)
-        ok, msg = await bridge._check_gateway()
+        bridge = ClaudeCodeBridge(config)
+        ok, msg = await bridge._check_bridge()
         assert ok is False
-        assert "not configured" in msg
+        assert "not registered" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -438,7 +492,7 @@ class TestCheckGateway:
 
 class TestCheckLocal:
     @pytest.mark.asyncio
-    @patch("src.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
+    @patch("src.gateway.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
     async def test_found(self, mock_exec, bridge):
         mock_proc = AsyncMock()
         mock_proc.communicate = AsyncMock(return_value=(b"1.0.0\n", b""))
@@ -449,7 +503,7 @@ class TestCheckLocal:
         assert "1.0.0" in msg
 
     @pytest.mark.asyncio
-    @patch("src.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
+    @patch("src.gateway.bridges.claude_code.bridge.asyncio.create_subprocess_exec")
     async def test_not_found(self, mock_exec, bridge):
         mock_exec.side_effect = FileNotFoundError("No such file")
         ok, msg = await bridge._check_local()

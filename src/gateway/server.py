@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Claude Code bridge — runs on host, executes claude CLI for the Docker container."""
+"""Unified host gateway — runs on host, executes allowed commands for the Docker container."""
 
+import hmac
 import json
 import os
 import signal
@@ -9,25 +10,59 @@ import sys
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-# Try loading from config.yaml (single source of truth), fall back to env vars
-# for standalone usage without config file.
+# Build allowlists from config, with standalone fallback.
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
     from src.config import load_config
     _cfg = load_config()
-    PORT = _cfg.claude_code.bridge_port
-    TOKEN = _cfg.claude_code.bridge_token or ""
-except Exception:
+    PORT = _cfg.gateway.port
+    TOKEN = _cfg.gateway.token or ""
+    _ALLOWLISTS: dict[str, set[str]] = {}
+    for bridge_name, bdef in _cfg.gateway.bridges.items():
+        _ALLOWLISTS[bridge_name] = set(bdef.allowed_commands)
+except Exception as e:
+    import traceback
+    sys.stderr.write(f"[gateway] WARNING: Failed to load config ({e}), using env-var fallback\n")
+    traceback.print_exc(file=sys.stderr)
     _cfg = None
-    PORT = int(os.environ.get("CC_BRIDGE_PORT", "9842"))
-    TOKEN = os.environ.get("CC_BRIDGE_TOKEN", "")
+    PORT = int(os.environ.get("GATEWAY_PORT", os.environ.get("CC_BRIDGE_PORT", "9842")))
+    TOKEN = os.environ.get("GATEWAY_TOKEN", os.environ.get("CC_BRIDGE_TOKEN", ""))
+    # Standalone fallback: only claude-code bridge with "claude" command
+    _ALLOWLISTS = {"claude-code": {"claude"}}
 
 
-class BridgeHandler(BaseHTTPRequestHandler):
+def validate_request(data: dict, allowlists: dict[str, set[str]]) -> tuple[bool, int, str]:
+    """Validate a request against bridge allowlists.
+
+    Returns (ok, http_status, error_message). If ok is True, status/message are unused.
+    """
+    bridge = data.get("bridge")
+    if not bridge:
+        return False, 400, "missing 'bridge' field"
+
+    if bridge not in allowlists:
+        return False, 403, f"unknown bridge: {bridge}"
+
+    cmd = data.get("cmd", [])
+    if not cmd:
+        return False, 400, "missing cmd"
+
+    # Validate command basename against allowlist
+    cmd_basename = os.path.basename(cmd[0])
+    if cmd_basename not in allowlists[bridge]:
+        return False, 403, f"command '{cmd_basename}' not allowed for bridge '{bridge}'"
+
+    return True, 0, ""
+
+
+class GatewayHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            self._respond(200, {"status": "ok"})
+            self._respond(200, {
+                "status": "ok",
+                "bridges": list(_ALLOWLISTS.keys()),
+            })
         else:
             self._respond(404, {"error": "not found"})
 
@@ -42,13 +77,15 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if data is None:
             return
 
-        cmd = data.get("cmd", [])
+        # Validate bridge + command against allowlists
+        ok, status, error = validate_request(data, _ALLOWLISTS)
+        if not ok:
+            self._respond(status, {"error": error})
+            return
+
+        cmd = data["cmd"]
         cwd = data.get("cwd")
         timeout = data.get("timeout", 0)
-
-        if not cmd:
-            self._respond(400, {"error": "missing cmd"})
-            return
 
         env = os.environ.copy()
         env.pop("CLAUDE_CODE", None)
@@ -66,6 +103,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 "stderr": result.stderr,
                 "returncode": result.returncode,
             })
+        except FileNotFoundError:
+            self._respond(200, {
+                "stdout": "",
+                "stderr": f"Command '{cmd[0]}' not found on host. Install it first.",
+                "returncode": 127,
+            })
         except subprocess.TimeoutExpired:
             self._respond(200, {
                 "stdout": "", "stderr": "Command timed out", "returncode": -1,
@@ -76,7 +119,6 @@ class BridgeHandler(BaseHTTPRequestHandler):
     # --- Helpers ---
 
     def _check_auth(self) -> bool:
-        import hmac
         if not TOKEN:
             return True
         auth = self.headers.get("Authorization", "")
@@ -102,31 +144,24 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _claude_version(self) -> str:
-        try:
-            r = subprocess.run(
-                ["claude", "--version"], capture_output=True, text=True, timeout=10)
-            return r.stdout.strip() if r.returncode == 0 else "unavailable"
-        except Exception:
-            return "unavailable"
-
     def log_message(self, format, *args):
-        sys.stderr.write(f"[cc-bridge] {format % args}\n")
+        sys.stderr.write(f"[gateway] {format % args}\n")
 
 
 if __name__ == "__main__":
-    print(f"Claude Code bridge on 0.0.0.0:{PORT}")
+    print(f"Host gateway on 0.0.0.0:{PORT}")
+    print(f"Bridges: {', '.join(_ALLOWLISTS.keys()) or '(none)'}")
     if TOKEN:
         print("Auth: enabled")
     else:
-        print("Auth: disabled (set CC_BRIDGE_TOKEN to enable)")
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), BridgeHandler)
+        print("Auth: disabled (set GATEWAY_TOKEN to enable)")
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), GatewayHandler)
     server.daemon_threads = True
 
     stop = threading.Event()
 
     def _shutdown(signum, _frame):
-        print("\nShutting down bridge...")
+        print("\nShutting down gateway...")
         stop.set()
 
     signal.signal(signal.SIGINT, _shutdown)
@@ -138,4 +173,4 @@ if __name__ == "__main__":
     stop.wait()
     server.shutdown()
     server.server_close()
-    print("Bridge stopped.")
+    print("Gateway stopped.")
