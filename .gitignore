@@ -17,6 +17,9 @@ workspace/sessions/
 workspace/checkpoints.db*
 logs/
 
+# Docs build output
+site/
+
 # Python
 .coverage
 .venv/

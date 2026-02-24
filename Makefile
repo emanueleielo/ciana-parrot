@@ -1,3 +1,5 @@
+.PHONY: build up down logs restart shell test gateway docs docs-build
+
 build:
 	docker compose build
 
@@ -25,3 +27,13 @@ gateway:
 	@if [ ! -d ".venv" ]; then python3 -m venv .venv; fi
 	@.venv/bin/pip install -q --upgrade -r src/gateway/requirements.txt
 	@exec .venv/bin/python src/gateway/server.py
+
+docs:
+	@if [ ! -d ".venv" ]; then python3 -m venv .venv; fi
+	@.venv/bin/pip install -q --upgrade -r requirements-docs.txt
+	@.venv/bin/mkdocs serve
+
+docs-build:
+	@if [ ! -d ".venv" ]; then python3 -m venv .venv; fi
+	@.venv/bin/pip install -q --upgrade -r requirements-docs.txt
+	@.venv/bin/mkdocs build

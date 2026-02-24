@@ -1,0 +1,435 @@
+/* CianaParrot docs — matches landing page aesthetic */
+
+/* ===== Google Fonts (same as landing) ===== */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Chakra+Petch:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+/* ===== Color scheme override ===== */
+[data-md-color-scheme="slate"] {
+  /* Core backgrounds */
+  --md-default-bg-color: #050510;
+  --md-default-fg-color: #E8DCC8;
+  --md-default-fg-color--light: #8a8a96;
+  --md-default-fg-color--lighter: rgba(232, 220, 200, 0.32);
+  --md-default-fg-color--lightest: rgba(232, 220, 200, 0.12);
+
+  /* Primary (header, nav active) */
+  --md-primary-fg-color: #000000;
+  --md-primary-fg-color--light: #050510;
+  --md-primary-fg-color--dark: #000000;
+  --md-primary-bg-color: #E8DCC8;
+  --md-primary-bg-color--light: #E8DCC8;
+
+  /* Accent (links, hover) */
+  --md-accent-fg-color: #00F0FF;
+  --md-accent-fg-color--transparent: rgba(0, 240, 255, 0.1);
+
+  /* Typography */
+  --md-typeset-color: #E8DCC8;
+  --md-typeset-a-color: #00F0FF;
+
+  /* Code */
+  --md-code-bg-color: rgba(8, 8, 25, 0.85);
+  --md-code-fg-color: #FFD4A8;
+  --md-code-hl-color: rgba(0, 240, 255, 0.1);
+  --md-code-hl-number-color: #FF6B35;
+  --md-code-hl-string-color: #5cf5d5;
+  --md-code-hl-keyword-color: #00F0FF;
+  --md-code-hl-function-color: #FFD4A8;
+  --md-code-hl-comment-color: #5A5A6A;
+  --md-code-hl-operator-color: #FF6B35;
+  --md-code-hl-punctuation-color: #5A5A6A;
+  --md-code-hl-constant-color: #FF0055;
+  --md-code-hl-special-color: #FF6B35;
+  --md-code-hl-name-color: var(--md-code-fg-color);
+  --md-code-hl-generic-color: var(--md-code-fg-color);
+
+  /* Footer */
+  --md-footer-bg-color: #000000;
+  --md-footer-bg-color--dark: #000000;
+  --md-footer-fg-color: #E8DCC8;
+  --md-footer-fg-color--light: #5A5A6A;
+  --md-footer-fg-color--lighter: rgba(232, 220, 200, 0.3);
+
+  /* Admonitions */
+  --md-admonition-bg-color: rgba(8, 8, 25, 0.85);
+
+  /* Shadows — subtle cyan glow */
+  --md-shadow-z1: 0 0 12px rgba(0, 240, 255, 0.03);
+  --md-shadow-z2: 0 0 24px rgba(0, 240, 255, 0.04);
+  --md-shadow-z3: 0 0 40px rgba(0, 240, 255, 0.06);
+}
+
+/* ===== Fonts ===== */
+:root {
+  --md-text-font: "IBM Plex Mono", ui-monospace, monospace;
+  --md-code-font: "Space Mono", monospace;
+}
+
+/* Headings use Chakra Petch */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 600;
+  color: #E8DCC8;
+  letter-spacing: 0.02em;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ===== Header ===== */
+.md-header {
+  background: #000000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 30px rgba(0, 0, 0, 0.8);
+}
+
+.md-header[data-md-state="shadow"] {
+  box-shadow: 0 1px 30px rgba(0, 0, 0, 0.8);
+}
+
+.md-header__title {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* Header search */
+.md-search__input {
+  background: rgba(232, 220, 200, 0.06);
+  color: #E8DCC8;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.md-search__input::placeholder {
+  color: #5A5A6A;
+}
+
+/* ===== Sidebar / Navigation ===== */
+.md-sidebar {
+  background: #000000;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.md-nav__link {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  color: #5A5A6A;
+  transition: color 0.3s ease;
+}
+
+.md-nav__link:hover {
+  color: #00F0FF;
+}
+
+.md-nav__link--active,
+.md-nav__item--active > .md-nav__link {
+  color: #00F0FF;
+  font-weight: 500;
+}
+
+/* Nav tabs (top-level) */
+.md-tabs {
+  background: #000000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.md-tabs__link {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: #5A5A6A;
+  transition: color 0.3s ease;
+}
+
+.md-tabs__link:hover {
+  color: #E8DCC8;
+}
+
+.md-tabs__link--active {
+  color: #00F0FF;
+}
+
+/* ===== Content ===== */
+.md-typeset {
+  font-size: 0.78rem;
+  line-height: 1.75;
+  color: #E8DCC8;
+}
+
+/* Links */
+.md-typeset a {
+  color: #00F0FF;
+  text-decoration: none;
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+.md-typeset a:hover {
+  color: #00F0FF;
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+}
+
+/* Inline code */
+.md-typeset code {
+  background: rgba(8, 8, 25, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #FFD4A8;
+  font-size: 0.82em;
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+
+/* Code blocks */
+.md-typeset pre {
+  background: rgba(8, 8, 25, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.md-typeset pre > code {
+  border: none;
+  background: transparent;
+}
+
+/* Code copy button */
+.md-clipboard {
+  color: #5A5A6A;
+}
+
+.md-clipboard:hover {
+  color: #00F0FF;
+}
+
+/* ===== Tables ===== */
+.md-typeset table:not([class]) {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.75rem;
+}
+
+.md-typeset table:not([class]) th {
+  background: rgba(0, 240, 255, 0.05);
+  color: #00F0FF;
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.12);
+}
+
+.md-typeset table:not([class]) td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background: rgba(0, 240, 255, 0.02);
+}
+
+/* ===== Admonitions ===== */
+.md-typeset .admonition,
+.md-typeset details {
+  background: rgba(8, 8, 25, 0.85);
+  border-left: 3px solid;
+  border-radius: 2px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* Note */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: #00F0FF;
+}
+
+/* Tip */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: #5cf5d5;
+}
+
+/* Warning */
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-color: #FF6B35;
+}
+
+/* Danger */
+.md-typeset .admonition.danger,
+.md-typeset details.danger {
+  border-color: #FF0055;
+}
+
+/* Info */
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  border-color: #0096FF;
+}
+
+/* ===== Tabbed content ===== */
+.md-typeset .tabbed-labels > label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #5A5A6A;
+}
+
+.md-typeset .tabbed-labels > label:hover {
+  color: #E8DCC8;
+}
+
+.md-typeset .tabbed-labels > .tabbed-label--active {
+  color: #00F0FF;
+}
+
+.md-typeset .tabbed-labels > label::after {
+  background: #00F0FF;
+}
+
+/* ===== TOC (right sidebar) ===== */
+.md-sidebar--secondary {
+  background: transparent;
+}
+
+.md-nav__link--passed {
+  color: #5A5A6A;
+}
+
+/* ===== Footer ===== */
+.md-footer {
+  background: #000000;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.md-footer-nav__link {
+  transition: opacity 0.3s ease;
+}
+
+.md-footer-nav__link:hover {
+  opacity: 0.8;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) #000000;
+}
+
+/* ===== Selection ===== */
+::selection {
+  background: rgba(255, 107, 53, 0.3);
+  color: #E8DCC8;
+}
+
+/* ===== Search results ===== */
+.md-search-result__meta {
+  color: #5A5A6A;
+}
+
+.md-search-result__link:hover {
+  background: rgba(0, 240, 255, 0.04);
+}
+
+.md-search-result mark {
+  background: rgba(0, 240, 255, 0.2);
+  color: #00F0FF;
+}
+
+/* ===== Mermaid diagrams ===== */
+.mermaid {
+  background: transparent;
+}
+
+/* ===== Back-to-top button ===== */
+.md-top {
+  background: rgba(8, 8, 25, 0.9);
+  border: 1px solid rgba(0, 240, 255, 0.12);
+  color: #00F0FF;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.08);
+}
+
+.md-top:hover {
+  background: rgba(0, 240, 255, 0.08);
+}
+
+/* ===== Source code reference ===== */
+.md-typeset .md-source {
+  color: #5A5A6A;
+}
+
+/* ===== Logo styling ===== */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.3));
+  transition: filter 0.3s ease;
+}
+
+.md-header__button.md-logo:hover img,
+.md-header__button.md-logo:hover svg {
+  filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.5));
+}
+
+/* ===== Permalink anchors ===== */
+.md-typeset .headerlink {
+  color: rgba(0, 240, 255, 0.3);
+  transition: color 0.3s ease;
+}
+
+.md-typeset .headerlink:hover {
+  color: #00F0FF;
+}
+
+/* ===== Horizontal rules ===== */
+.md-typeset hr {
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ===== Blockquotes ===== */
+.md-typeset blockquote {
+  border-left: 3px solid rgba(0, 240, 255, 0.2);
+  color: #8a8a96;
+}
+
+/* ===== Lists ===== */
+.md-typeset ul li::marker,
+.md-typeset ol li::marker {
+  color: #5A5A6A;
+}
+
+/* ===== Keyboard keys ===== */
+.md-typeset kbd {
+  background: rgba(8, 8, 25, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #E8DCC8;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}

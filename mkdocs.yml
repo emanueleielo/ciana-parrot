@@ -1,0 +1,109 @@
+site_name: CianaParrot
+site_description: Developer documentation for CianaParrot — a self-hosted AI personal assistant
+site_url: https://docs.cianaparrot.dev/
+repo_url: https://github.com/emanueleielo/ciana-parrot
+repo_name: emanueleielo/ciana-parrot
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    scheme: slate
+  font: false  # Loaded via custom CSS to match landing page
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - First Run: getting-started/first-run.md
+      - Configuration: getting-started/configuration.md
+  - Architecture:
+      - architecture/index.md
+      - Message Flow: architecture/message-flow.md
+      - Gateway System: architecture/gateway-system.md
+      - Persistence: architecture/persistence.md
+  - Guides:
+      - guides/index.md
+      - Add a Channel: guides/add-channel.md
+      - Add a Bridge: guides/add-bridge.md
+      - Add a Skill: guides/add-skill.md
+      - Add a Tool: guides/add-tool.md
+      - Add a Mode Handler: guides/add-mode-handler.md
+      - Add a Config Section: guides/add-config-section.md
+      - Customize the Agent: guides/customize-agent.md
+      - Set Up the Gateway: guides/setup-gateway.md
+  - Reference:
+      - reference/index.md
+      - API:
+          - Channels: reference/api/channels.md
+          - Bridges: reference/api/bridges.md
+          - Gateway: reference/api/gateway.md
+          - Tools: reference/api/tools.md
+          - Config Models: reference/api/config.md
+          - Router: reference/api/router.md
+          - Scheduler: reference/api/scheduler.md
+          - Agent: reference/api/agent.md
+          - Middleware: reference/api/middleware.md
+      - Config Reference: reference/config-reference.md
+      - Skill Format: reference/skill-format.md
+      - Telegram Commands: reference/telegram-commands.md
+  - Contributing:
+      - contributing/index.md
+      - Development Setup: contributing/development-setup.md
+      - Testing: contributing/testing.md
+      - Code Conventions: contributing/code-conventions.md
+      - Git Guidelines: contributing/git-guidelines.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.mark
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+extra_css:
+  - stylesheets/custom.css
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/emanueleielo/ciana-parrot
