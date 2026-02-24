@@ -22,5 +22,6 @@ test:
 
 gateway:
 	@echo "Starting host gateway on port 9842..."
-	@if [ ! -d ".venv" ]; then python3 -m venv .venv && .venv/bin/pip install pyyaml pydantic python-dotenv; fi
+	@if [ ! -d ".venv" ]; then python3 -m venv .venv; fi
+	@.venv/bin/pip install -q --upgrade -r src/gateway/requirements.txt
 	@exec .venv/bin/python src/gateway/server.py

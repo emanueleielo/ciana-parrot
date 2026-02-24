@@ -222,7 +222,11 @@ else
   error "$INSTALL_DIR exists but is not a git repository."
 fi
 
-cd "$INSTALL_DIR"
+if [ -d "$INSTALL_DIR" ]; then
+  cd "$INSTALL_DIR"
+else
+  [ "$DRY_RUN" = true ] && info "Would cd to $INSTALL_DIR (does not exist yet)"
+fi
 
 # ── 3. Setup .env ────────────────────────────────────────────────────────────
 
@@ -234,11 +238,11 @@ set_env_var() {
 
   if grep -q "^${key}=" "$file" 2>/dev/null; then
     # Update existing — rewrite line without sed (safe for any value)
-    awk -v k="$key" -v v="$value" 'BEGIN{FS=OFS="="} $1==k{print k"="v; next} {print}' "$file" > "$tmpfile"
+    k="$key" v="$value" awk 'BEGIN{FS=OFS="="} $1==ENVIRON["k"]{print ENVIRON["k"]"="ENVIRON["v"]; next} {print}' "$file" > "$tmpfile"
     mv "$tmpfile" "$file"
   elif grep -q "^# *${key}=" "$file" 2>/dev/null; then
     # Uncomment and set
-    awk -v k="$key" -v v="$value" '{if($0 ~ "^# *"k"="){print k"="v}else{print}}' "$file" > "$tmpfile"
+    k="$key" v="$value" awk '{if($0 ~ "^# *"ENVIRON["k"]"="){print ENVIRON["k"]"="ENVIRON["v"]}else{print}}' "$file" > "$tmpfile"
     mv "$tmpfile" "$file"
   else
     echo "${key}=${value}" >> "$file"
@@ -249,7 +253,7 @@ env_var_is_set() {
   # Check if a key exists in .env with a real value (not empty, not a placeholder)
   local key="$1"
   local val
-  val=$(grep "^${key}=" .env 2>/dev/null | head -1 | cut -d= -f2-)
+  val=$(grep "^${key}=" "$INSTALL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-)
   # Empty
   [ -z "$val" ] && return 1
   # Common placeholder patterns
@@ -261,7 +265,7 @@ env_var_is_set() {
   return 0
 }
 
-if [ -f .env ]; then
+if [ -f "$INSTALL_DIR/.env" ]; then
   info ".env already exists — checking for missing variables..."
 
   # Add any new variables from .env.example that aren't in .env
@@ -270,12 +274,12 @@ if [ -f .env ]; then
     # Skip comments and empty lines
     [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
     key="${line%%=*}"
-    if ! grep -q "^${key}=" .env 2>/dev/null; then
-      echo "$line" >> .env
+    if ! grep -q "^${key}=" "$INSTALL_DIR/.env" 2>/dev/null; then
+      echo "$line" >> "$INSTALL_DIR/.env"
       info "Added missing variable: $key"
       UPDATED=true
     fi
-  done < .env.example
+  done < "$INSTALL_DIR/.env.example"
 
   if [ "$UPDATED" = false ]; then
     info ".env is up to date."
@@ -296,7 +300,7 @@ if [ -f .env ]; then
   done
 
   # Ensure gateway tokens exist
-  if ! grep -q "^GATEWAY_TOKEN=" .env 2>/dev/null || ! env_var_is_set "GATEWAY_TOKEN"; then
+  if ! grep -q "^GATEWAY_TOKEN=" "$INSTALL_DIR/.env" 2>/dev/null || ! env_var_is_set "GATEWAY_TOKEN"; then
     GW_TOKEN="ciana-gw-$(generate_token)"
     set_env_var "GATEWAY_TOKEN" "$GW_TOKEN"
     set_env_var "CC_BRIDGE_TOKEN" "$GW_TOKEN"
@@ -304,10 +308,28 @@ if [ -f .env ]; then
   fi
 else
   info "Creating .env from template..."
-  run cp .env.example .env
+  run cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
 
   if [ "$DRY_RUN" = true ]; then
     info "Would prompt for API keys (skipping in dry-run)"
+  elif [ "$NO_PROMPT" = true ]; then
+    # Read from environment variables
+    TELEGRAM_TOKEN=$(prompt_value "Telegram Bot Token" TELEGRAM_BOT_TOKEN true true)
+    set_env_var "TELEGRAM_BOT_TOKEN" "$TELEGRAM_TOKEN"
+
+    ANTHROPIC_KEY=$(prompt_value "Anthropic API Key" ANTHROPIC_API_KEY true true)
+    set_env_var "ANTHROPIC_API_KEY" "$ANTHROPIC_KEY"
+
+    GW_TOKEN="ciana-gw-$(generate_token)"
+    set_env_var "GATEWAY_TOKEN" "$GW_TOKEN"
+    set_env_var "CC_BRIDGE_TOKEN" "$GW_TOKEN"
+
+    # Optional — set only if present in env
+    for var in OPENAI_API_KEY BRAVE_API_KEY GH_TOKEN GEMINI_API_KEY ELEVENLABS_API_KEY; do
+      [ -n "${!var:-}" ] && set_env_var "$var" "${!var}"
+    done
+
+    info ".env configured from environment variables."
   else
     printf "\n  Enter your API keys below. Secrets are never displayed.\n"
     printf "\n  ${BOLD}Telegram Bot:${RESET} Open Telegram, search @BotFather, send /newbot and follow the steps.\n"
@@ -399,11 +421,7 @@ else
   if [ ! -d "$INSTALL_DIR/.venv" ]; then
     info "Creating Python venv for gateway..."
     run python3 -m venv "$INSTALL_DIR/.venv"
-    if [ -f "$INSTALL_DIR/src/gateway/requirements.txt" ]; then
-      run "$INSTALL_DIR/.venv/bin/pip" install -q -r "$INSTALL_DIR/src/gateway/requirements.txt"
-    else
-      run "$INSTALL_DIR/.venv/bin/pip" install -q pyyaml pydantic python-dotenv
-    fi
+    run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade -r "$INSTALL_DIR/src/gateway/requirements.txt"
   fi
 
   SETUP_SERVICE=false
