@@ -4,7 +4,7 @@ set -euo pipefail
 # ── CianaParrot Installer ────────────────────────────────────────────────────
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/emanueleielo/ciana-parrot/main/install.sh | bash
-#   bash install.sh [--dry-run] [--no-prompt]
+#   bash install.sh [--dry-run] [--no-prompt] [--help]
 
 REPO_URL="https://github.com/emanueleielo/ciana-parrot.git"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/ciana-parrot}"
@@ -20,6 +20,14 @@ for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=true ;;
     --no-prompt) NO_PROMPT=true ;;
+    -h|--help)
+      echo "Usage: bash install.sh [--dry-run] [--no-prompt] [--help]"
+      echo ""
+      echo "  --dry-run     Preview actions without making changes"
+      echo "  --no-prompt   Non-interactive mode (reads from env vars)"
+      echo "  --help        Show this help message"
+      exit 0
+      ;;
     *) ;;
   esac
 done
@@ -144,12 +152,12 @@ else
 fi
 
 # Docker Compose — detect plugin vs standalone
-COMPOSE_CMD=()
+COMPOSE_CMD=""
 if docker compose version &>/dev/null; then
-  COMPOSE_CMD=(docker compose)
+  COMPOSE_CMD="docker compose"
   info "Docker Compose: $(docker compose version --short 2>/dev/null || echo 'ok')"
 elif command -v docker-compose &>/dev/null; then
-  COMPOSE_CMD=(docker-compose)
+  COMPOSE_CMD="docker-compose"
   info "Docker Compose (standalone): $(docker-compose --version)"
 else
   warn "Docker Compose not found."
@@ -240,17 +248,25 @@ set_env_var() {
   local key="$1" value="$2" file="$INSTALL_DIR/.env"
   local tmpfile="${file}.tmp"
 
+  if [ "$DRY_RUN" = true ]; then
+    info "[dry-run] Would set ${key} in .env"
+    return
+  fi
+
   if grep -q "^${key}=" "$file" 2>/dev/null; then
     # Update existing — rewrite line without sed (safe for any value)
     k="$key" v="$value" awk 'BEGIN{FS=OFS="="} $1==ENVIRON["k"]{print ENVIRON["k"]"="ENVIRON["v"]; next} {print}' "$file" > "$tmpfile"
+    chmod 600 "$tmpfile"
     mv "$tmpfile" "$file"
   elif grep -q "^# *${key}=" "$file" 2>/dev/null; then
     # Uncomment and set
     k="$key" v="$value" awk '{if($0 ~ "^# *"ENVIRON["k"]"="){print ENVIRON["k"]"="ENVIRON["v"]}else{print}}' "$file" > "$tmpfile"
+    chmod 600 "$tmpfile"
     mv "$tmpfile" "$file"
   else
     echo "${key}=${value}" >> "$file"
   fi
+  chmod 600 "$file"
 }
 
 env_var_is_set() {
@@ -279,8 +295,13 @@ if [ -f "$INSTALL_DIR/.env" ]; then
     [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
     key="${line%%=*}"
     if ! grep -q "^${key}=" "$INSTALL_DIR/.env" 2>/dev/null; then
-      echo "$line" >> "$INSTALL_DIR/.env"
-      info "Added missing variable: $key"
+      if [ "$DRY_RUN" = true ]; then
+        info "[dry-run] Would add missing variable: $key"
+      else
+        echo "$line" >> "$INSTALL_DIR/.env"
+        chmod 600 "$INSTALL_DIR/.env"
+        info "Added missing variable: $key"
+      fi
       UPDATED=true
     fi
   done < "$INSTALL_DIR/.env.example"
@@ -313,6 +334,7 @@ if [ -f "$INSTALL_DIR/.env" ]; then
 else
   info "Creating .env from template..."
   run cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+  run chmod 600 "$INSTALL_DIR/.env"
 
   if [ "$DRY_RUN" = true ]; then
     info "Would prompt for API keys (skipping in dry-run)"
@@ -378,14 +400,19 @@ fi
 
 step "Building and starting CianaParrot"
 
-run make build
-run make up
+if [ -n "$COMPOSE_CMD" ]; then
+  run $COMPOSE_CMD build
+  run $COMPOSE_CMD up -d
+else
+  run make build
+  run make up
+fi
 
-if [ "$DRY_RUN" = false ] && [ ${#COMPOSE_CMD[@]} -gt 0 ]; then
+if [ "$DRY_RUN" = false ] && [ -n "$COMPOSE_CMD" ]; then
   sleep 3
-  if "${COMPOSE_CMD[@]}" ps --format json 2>/dev/null | grep -q '"running"'; then
+  if $COMPOSE_CMD ps --format json 2>/dev/null | grep -q '"running"'; then
     info "Docker container is running."
-  elif "${COMPOSE_CMD[@]}" ps 2>/dev/null | grep -q "Up"; then
+  elif $COMPOSE_CMD ps 2>/dev/null | grep -q "Up"; then
     info "Docker container is running."
   else
     warn "Container may not be running. Check: make logs"
@@ -425,11 +452,13 @@ else
   if [ ! -d "$INSTALL_DIR/.venv" ]; then
     info "Creating Python venv for gateway..."
     run python3 -m venv "$INSTALL_DIR/.venv"
-    if [ -f "$INSTALL_DIR/src/gateway/requirements.txt" ]; then
-      run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade -r "$INSTALL_DIR/src/gateway/requirements.txt"
-    else
-      run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade pyyaml "pydantic>=2,<3" python-dotenv
-    fi
+  fi
+
+  # Install/update gateway dependencies (always, so re-runs pick up changes)
+  if [ -f "$INSTALL_DIR/src/gateway/requirements.txt" ]; then
+    run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade -r "$INSTALL_DIR/src/gateway/requirements.txt"
+  else
+    run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade pyyaml "pydantic>=2,<3" python-dotenv
   fi
 
   SETUP_SERVICE=false
@@ -515,16 +544,23 @@ UNIT
 
     fi
   else
-    # Background process
+    # Background process — clean stale pidfile
+    if [ -f "$INSTALL_DIR/.gateway.pid" ]; then
+      OLD_PID=$(cat "$INSTALL_DIR/.gateway.pid" 2>/dev/null)
+      if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
+        rm -f "$INSTALL_DIR/.gateway.pid"
+      fi
+    fi
     info "Starting gateway in background..."
     if [ "$DRY_RUN" = false ]; then
       mkdir -p "$INSTALL_DIR/logs"
       nohup "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/src/gateway/server.py" \
         > "$INSTALL_DIR/logs/gateway.log" 2>&1 &
       GW_PID=$!
+      echo "$GW_PID" > "$INSTALL_DIR/.gateway.pid"
       info "Gateway started (PID: $GW_PID)."
       info "  Logs: tail -f $INSTALL_DIR/logs/gateway.log"
-      info "  Stop: kill $GW_PID"
+      info "  Stop: kill \$(cat $INSTALL_DIR/.gateway.pid)"
     else
       run nohup ".venv/bin/python" src/gateway/server.py
     fi
