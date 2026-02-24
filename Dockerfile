@@ -24,6 +24,6 @@ RUN chown -R app:app /app
 USER app
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-    CMD python3 -c "import sqlite3; sqlite3.connect('/app/workspace/checkpoints.db').execute('SELECT 1')" || exit 1
+    CMD python3 -c "import sqlite3; sqlite3.connect('/app/data/checkpoints.db').execute('SELECT 1')" || exit 1
 
 CMD ["python", "-m", "src.main"]

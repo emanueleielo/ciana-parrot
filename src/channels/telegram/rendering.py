@@ -36,20 +36,48 @@ _TOOL_ICONS: dict[str, str] = {
 }
 _DEFAULT_ICON = "\U0001f527"  # 🔧
 
+# Bridge name (lowercase) → emoji for host_execute calls
+_BRIDGE_ICONS: dict[str, str] = {
+    "spotify": "\U0001f3b5",         # 🎵
+    "sonos": "\U0001f50a",           # 🔊
+    "apple-reminders": "\u2611\ufe0f",  # ☑️
+    "things": "\u2705",              # ✅
+    "imessage": "\U0001f4ac",        # 💬
+    "whatsapp": "\U0001f4ac",        # 💬
+    "bear-notes": "\U0001f4dd",      # 📝
+    "obsidian": "\U0001f4dd",        # 📝
+    "claude-code": "\U0001f4bb",     # 💻
+    "openhue": "\U0001f4a1",         # 💡
+    "camsnap": "\U0001f4f7",         # 📷
+    "peekaboo": "\U0001f4f7",        # 📷
+    "1password": "\U0001f511",       # 🔑
+    "blucli": "\U0001f9ca",          # 🧊
+}
 
-def _tool_icon(name: str, is_error: bool) -> str:
+
+def _tool_icon(name: str, is_error: bool, display_name: str = "") -> str:
     """Return the emoji for a tool, or ❌ on error."""
     if is_error:
         return "\u274c"
+    # For host_execute, resolve icon from bridge name
+    if name == "host_execute" and display_name:
+        bridge_key = display_name.lower().replace(" ", "-")
+        return _BRIDGE_ICONS.get(bridge_key, _DEFAULT_ICON)
     return _TOOL_ICONS.get(name, _DEFAULT_ICON)
+
+
+def _display_label(ev: ToolCallEvent) -> str:
+    """Return the display label for a tool call event."""
+    return ev.display_name or ev.name
 
 
 def tool_detail_html(ev: ToolCallEvent) -> str:
     """Render a single tool call as Telegram HTML for the details view."""
-    icon = _tool_icon(ev.name, ev.is_error)
-    name_esc = html.escape(ev.name)
+    label = _display_label(ev)
+    icon = _tool_icon(ev.name, ev.is_error, label)
+    label_esc = html.escape(label)
     summary_esc = f" {html.escape(ev.input_summary)}" if ev.input_summary else ""
-    header = f"{icon} <b>{name_esc}</b>{summary_esc}"
+    header = f"{icon} <b>{label_esc}</b>{summary_esc}"
     if ev.result_text:
         truncated = truncate_text(ev.result_text, max_chars=2500, max_lines=25)
         return f"{header}\n<pre>{html.escape(truncated)}</pre>"
@@ -111,29 +139,30 @@ def _build_compact_lines(events: list) -> list[str]:
             vi += 1
 
         elif isinstance(ev, ToolCallEvent):
+            label = _display_label(ev)
             if ev.is_error and ev.result_text:
-                icon = _tool_icon(ev.name, ev.is_error)
+                icon = _tool_icon(ev.name, ev.is_error, label)
                 summary_str = f" {ev.input_summary}" if ev.input_summary else ""
-                line = f"{icon} **{ev.name}**{summary_str}"
+                line = f"{icon} **{label}**{summary_str}"
                 truncated = truncate_text(ev.result_text, max_lines=8)
                 flush_tools()
                 parts.append(f"{line}\n```\n{truncated}\n```")
                 vi += 1
             elif ev.name == "Task":
-                icon = _tool_icon(ev.name, False)
+                icon = _tool_icon(ev.name, False, label)
                 summary_str = f" {ev.input_summary}" if ev.input_summary else ""
-                tool_lines.append(f"{icon} **{ev.name}**{summary_str} \u2714")
+                tool_lines.append(f"{icon} **{label}**{summary_str} \u2714")
                 vi += 1
             else:
-                # Count consecutive same-name non-error tool calls
-                group_name = ev.name
-                group_icon = _tool_icon(group_name, False)
+                # Count consecutive same-label non-error tool calls
+                group_label = label
+                group_icon = _tool_icon(ev.name, False, group_label)
                 count = 0
                 summaries: list[str] = []
                 while vi < len(visible):
                     _, gev = visible[vi]
                     if (isinstance(gev, ToolCallEvent)
-                            and gev.name == group_name
+                            and _display_label(gev) == group_label
                             and not (gev.is_error and gev.result_text)):
                         count += 1
                         if gev.input_summary:
@@ -144,10 +173,10 @@ def _build_compact_lines(events: list) -> list[str]:
 
                 if count == 1:
                     summary_str = f" {summaries[0]}" if summaries else ""
-                    tool_lines.append(f"{group_icon} **{group_name}**{summary_str}")
+                    tool_lines.append(f"{group_icon} **{group_label}**{summary_str}")
                 else:
                     tool_lines.append(
-                        f"{group_icon} **{group_name}** {count} calls")
+                        f"{group_icon} **{group_label}** {count} calls")
 
         elif isinstance(ev, TextEvent):
             flush_tools()

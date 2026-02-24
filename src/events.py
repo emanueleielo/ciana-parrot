@@ -16,6 +16,7 @@ class ToolCallEvent:
     input_summary: str
     result_text: str
     is_error: bool
+    display_name: str = ""  # human-friendly label (e.g., "Spotify", "Web Search")
 
 
 @dataclass
@@ -43,6 +44,9 @@ def summarize_tool_input(tool_name: str, input_data: dict) -> str:
     if tool_name == "Bash":
         cmd = input_data.get("command", "")
         return cmd[:70] + "..." if len(cmd) > 70 else cmd
+    if tool_name == "host_execute":
+        cmd = input_data.get("command", "")
+        return cmd[:70] + "..." if len(cmd) > 70 else cmd
 
     # Generic fallback: try common keys, then any string value
     for key in ("file_path", "command", "pattern", "query", "url"):
@@ -53,6 +57,33 @@ def summarize_tool_input(tool_name: str, input_data: dict) -> str:
         if isinstance(v, str) and v:
             return v[:60] + "..." if len(v) > 60 else v
     return ""
+
+
+# Display name mapping for snake_case / internal tools
+_TOOL_DISPLAY_NAMES: dict[str, str] = {
+    "web_search": "Web Search",
+    "web_fetch": "Web Fetch",
+    "schedule_task": "Schedule",
+    "list_tasks": "Tasks",
+    "cancel_task": "Cancel Task",
+    "read_file": "Read",
+    "write_file": "Write",
+    "edit_file": "Edit",
+    "NotebookRead": "Read",
+    "NotebookEdit": "Edit",
+}
+
+
+def resolve_display_name(tool_name: str, args: dict) -> str:
+    """Resolve a human-friendly display name for a tool call.
+
+    For host_execute, returns the bridge name as a label (e.g., "Spotify").
+    For other tools, returns a friendly label or empty string to use the raw name.
+    """
+    if tool_name == "host_execute":
+        bridge = args.get("bridge", "")
+        return bridge.replace("-", " ").title() if bridge else "Host"
+    return _TOOL_DISPLAY_NAMES.get(tool_name, "")
 
 
 def extract_tool_result_text(content) -> str:

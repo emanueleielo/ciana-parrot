@@ -7,6 +7,7 @@ from .events import (
     ThinkingEvent,
     ToolCallEvent,
     extract_tool_result_text,
+    resolve_display_name,
     summarize_tool_input,
 )
 
@@ -87,6 +88,7 @@ def extract_agent_response(result: dict) -> AgentResponse:
                     input_summary=summarize_tool_input(name, args),
                     result_text=result_text,
                     is_error=is_error,
+                    display_name=resolve_display_name(name, args),
                 ))
 
     # Final text from last TextEvent

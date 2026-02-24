@@ -34,7 +34,7 @@ def router_ext_config(tmp_path) -> AppConfig:
 
 class TestSyncCountersWithCheckpoints:
     def test_syncs_from_db(self, mock_agent, tmp_path):
-        """Session counters should sync to one higher than the max checkpoint suffix."""
+        """Session counters should sync to the max checkpoint suffix (resume, not bump)."""
         data = tmp_path / "data"
         data.mkdir()
         ws = tmp_path / "workspace"
@@ -55,7 +55,7 @@ class TestSyncCountersWithCheckpoints:
             ),
         )
         router = MessageRouter(mock_agent, config, checkpointer=MagicMock())
-        assert router._session_counters.get("telegram_123") == 6
+        assert router._session_counters.get("telegram_123") == 5
 
     def test_no_db_file(self, mock_agent, tmp_path):
         """No checkpoints.db should not cause an error."""

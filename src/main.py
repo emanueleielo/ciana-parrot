@@ -93,6 +93,11 @@ async def main() -> None:
             await mcp_client.close()
         except (OSError, RuntimeError):
             logger.debug("MCP client close failed (already closed or loop shutdown)")
+    if checkpointer:
+        try:
+            await checkpointer.conn.close()
+        except Exception:
+            logger.debug("Checkpointer close failed (already closed)")
 
     logger.info("CianaParrot stopped.")
 

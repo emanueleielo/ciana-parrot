@@ -54,10 +54,10 @@ class MessageRouter:
                     base_key = parts[0]
                     existing = int(parts[1])
                     current = self._session_counters.get(base_key, 0)
-                    if existing >= current:
-                        self._session_counters[base_key] = existing + 1
-                        self._session_store.set(base_key, existing + 1)
-                        logger.info("Session counter synced: %s -> s%d (was %d)", base_key, existing + 1, current)
+                    if existing > current:
+                        self._session_counters[base_key] = existing
+                        self._session_store.set(base_key, existing)
+                        logger.info("Session counter synced: %s -> s%d (was %d)", base_key, existing, current)
             conn.close()
         except Exception as e:
             logger.warning("Failed to sync session counters with checkpoints: %s", e)
