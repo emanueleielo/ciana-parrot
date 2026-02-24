@@ -143,8 +143,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         env.pop("CLAUDE_CODE", None)
         env.pop("CLAUDECODE", None)
         effective_cwd = cwd if cwd and os.path.isdir(cwd) else None
-        # timeout=0 means "use default from config", not "infinite"
-        effective_timeout = DEFAULT_TIMEOUT if timeout == 0 else timeout
+        # timeout=0 means "no limit" (None disables subprocess timeout)
+        effective_timeout = None if timeout == 0 else timeout
 
         try:
             result = subprocess.run(
