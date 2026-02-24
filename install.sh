@@ -198,7 +198,11 @@ else
 fi
 
 if [ "$HAS_ERRORS" = true ]; then
-  error "Fix the issues above and re-run the installer."
+  if [ "$DRY_RUN" = true ]; then
+    warn "Some prerequisites are missing (continuing in dry-run mode)."
+  else
+    error "Fix the issues above and re-run the installer."
+  fi
 fi
 
 # ── 2. Clone or update repo ──────────────────────────────────────────────────
@@ -421,7 +425,11 @@ else
   if [ ! -d "$INSTALL_DIR/.venv" ]; then
     info "Creating Python venv for gateway..."
     run python3 -m venv "$INSTALL_DIR/.venv"
-    run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade -r "$INSTALL_DIR/src/gateway/requirements.txt"
+    if [ -f "$INSTALL_DIR/src/gateway/requirements.txt" ]; then
+      run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade -r "$INSTALL_DIR/src/gateway/requirements.txt"
+    else
+      run "$INSTALL_DIR/.venv/bin/pip" install -q --upgrade pyyaml "pydantic>=2,<3" python-dotenv
+    fi
   fi
 
   SETUP_SERVICE=false
