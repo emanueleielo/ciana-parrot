@@ -20,9 +20,30 @@ Use the `whatsapp` bridge to read and send WhatsApp messages via the wacli CLI.
 - iMessage/SMS -> use the `imessage` bridge
 - Any other messaging platform
 
+## Pre-flight: Ensure Sync is Running
+
+**Before any WhatsApp operation**, check that wacli is connected and syncing:
+
+1. Run `wacli-daemon status` to check if the sync daemon is running
+2. If the status is **"stopped"**, start it: `wacli-daemon start`
+3. After starting, wait a few seconds, then verify with `wacli doctor` that CONNECTED is `true`
+4. Only then proceed with the actual command
+
+This ensures messages are always up-to-date without requiring the user to manually sync.
+
+If `wacli doctor` shows AUTHENTICATED as `false`, tell the user they need to re-authenticate with `wacli auth` on the host (this requires scanning a QR code and cannot be done remotely).
+
 ## Commands
 
 All commands run via `host_execute(bridge="whatsapp", command="...")`.
+
+### Sync Daemon Management
+
+```
+wacli-daemon status          # Check if sync is running
+wacli-daemon start           # Start sync in background (idempotent)
+wacli-daemon stop            # Stop background sync
+```
 
 ### List Chats
 
@@ -57,12 +78,11 @@ wacli send text --to "1234567890-123456789@g.us" --message "Hello group!"
 wacli send file --to "+14155551212" --file /path/to/image.jpg --caption "Check this"
 ```
 
-### Auth & Sync
+### Auth & Diagnostics
 
 ```
-wacli auth
-wacli sync --follow
-wacli doctor
+wacli auth          # Interactive QR code authentication (host only)
+wacli doctor        # Check auth/connection/store status
 ```
 
 ## Contact Resolution
@@ -82,7 +102,8 @@ When the user asks to message someone by name (e.g. "send a message to Marco"), 
 
 ## Setup (on host)
 
-- Install: `brew install steipete/tap/wacli`
+- Install wacli: `brew install steipete/tap/wacli`
+- Install daemon: `ln -sf $(pwd)/scripts/wacli-daemon /opt/homebrew/bin/wacli-daemon`
 - Authenticate: `wacli auth` (scan QR code with WhatsApp on phone)
-- Initial sync: `wacli sync --follow`
+- Initial sync: `wacli-daemon start`
 - Add `whatsapp` bridge in `config.yaml`, restart gateway

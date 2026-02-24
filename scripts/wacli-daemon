@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# wacli-daemon — manage "wacli sync --follow" as a background daemon.
+# Usage: wacli-daemon {start|stop|status}
+
+set -euo pipefail
+
+WACLI_DIR="${HOME}/.wacli"
+PIDFILE="${WACLI_DIR}/sync.pid"
+LOGFILE="${WACLI_DIR}/sync.log"
+
+_is_running() {
+    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+}
+
+case "${1:-}" in
+    start)
+        if _is_running; then
+            echo "already running (PID $(cat "$PIDFILE"))"
+            exit 0
+        fi
+        rm -f "$PIDFILE"
+        nohup wacli sync --follow >> "$LOGFILE" 2>&1 &
+        echo $! > "$PIDFILE"
+        # Wait briefly and verify it actually started
+        sleep 2
+        if _is_running; then
+            echo "started (PID $(cat "$PIDFILE"))"
+        else
+            rm -f "$PIDFILE"
+            echo "failed to start — check $LOGFILE"
+            exit 1
+        fi
+        ;;
+    stop)
+        if _is_running; then
+            kill "$(cat "$PIDFILE")" 2>/dev/null
+            rm -f "$PIDFILE"
+            echo "stopped"
+        else
+            rm -f "$PIDFILE"
+            echo "not running"
+        fi
+        ;;
+    status)
+        if _is_running; then
+            echo "running (PID $(cat "$PIDFILE"))"
+        else
+            rm -f "$PIDFILE" 2>/dev/null
+            echo "stopped"
+        fi
+        ;;
+    *)
+        echo "Usage: wacli-daemon {start|stop|status}"
+        exit 1
+        ;;
+esac

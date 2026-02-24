@@ -82,7 +82,7 @@ gateway:
     blucli:
       allowed_commands: ["blu"]
     whatsapp:
-      allowed_commands: ["wacli"]
+      allowed_commands: ["wacli", "wacli-daemon"]
     1password:
       allowed_commands: ["op"]
 
