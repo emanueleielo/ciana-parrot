@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Runtime
+.gateway.pid
+
 # Data (runtime)
 data/allowed_users.json
 data/scheduled_tasks.json
