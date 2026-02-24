@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Runtime
+.gateway.pid
+
 # Data (runtime)
 data/allowed_users.json
 data/scheduled_tasks.json
@@ -12,8 +15,10 @@ data/checkpoints.db-shm
 data/checkpoints.db-wal
 workspace/sessions/
 workspace/checkpoints.db*
+logs/
 
 # Python
+.venv/
 __pycache__/
 *.pyc
 *.pyo

@@ -13,6 +13,11 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 # Build allowlists from config, with standalone fallback.
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
     from src.config import load_config
     _cfg = load_config()
     PORT = _cfg.gateway.port
