@@ -74,6 +74,26 @@ async def schedule_task(prompt: str, schedule_type: str, schedule_value: str) ->
     if schedule_type not in ("cron", "interval", "once"):
         return f"Invalid schedule_type: {schedule_type}. Use 'cron', 'interval', or 'once'."
 
+    # Validate schedule_value based on type
+    if schedule_type == "cron":
+        try:
+            from croniter import croniter
+            croniter(schedule_value)
+        except (ValueError, KeyError) as e:
+            return f"Invalid cron expression '{schedule_value}': {e}"
+    elif schedule_type == "interval":
+        try:
+            interval = int(schedule_value)
+            if interval <= 0:
+                return f"Invalid interval: must be a positive number of seconds, got '{schedule_value}'."
+        except ValueError:
+            return f"Invalid interval: '{schedule_value}' is not a valid integer."
+    elif schedule_type == "once":
+        try:
+            datetime.fromisoformat(schedule_value)
+        except ValueError:
+            return f"Invalid ISO timestamp: '{schedule_value}'. Use format like '2025-01-15T10:00:00'."
+
     channel = _current_channel.get()
     chat_id = _current_chat_id.get()
 

@@ -280,7 +280,7 @@ class TelegramChannel(AbstractChannel):
             return text.strip()
         except Exception as e:
             logger.exception("Voice transcription failed for chat %s", chat_id)
-            await self.send(chat_id, f"Voice transcription failed: {e}")
+            await self.send(chat_id, "Voice transcription failed. Please try again.")
             return None
 
     async def _download_photo_base64(self, message, chat_id: str) -> Optional[str]:
@@ -421,7 +421,7 @@ class TelegramChannel(AbstractChannel):
 
         except Exception as e:
             logger.exception("Error processing message from %s", msg.user_id)
-            await self.send(str_chat_id, f"Error: {e}")
+            await self.send(str_chat_id, "An error occurred while processing your message.")
 
     async def _handle_tool_details_callback_wrapper(
             self, update: Update,

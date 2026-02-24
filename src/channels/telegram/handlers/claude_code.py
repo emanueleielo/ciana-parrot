@@ -351,7 +351,7 @@ class ClaudeCodeHandler:
 
         except Exception as e:
             logger.exception("Error in Claude Code message for user %s", user_id)
-            error_text = f"Claude Code error: {e}"
+            error_text = "Claude Code encountered an error. Please try again."
             if placeholder:
                 try:
                     await placeholder.delete()

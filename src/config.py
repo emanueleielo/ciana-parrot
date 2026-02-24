@@ -138,6 +138,7 @@ class TranscriptionConfig(BaseModel):
 
 class BridgeDefinition(BaseModel):
     allowed_commands: list[str] = Field(default_factory=list)
+    allowed_cwd: list[str] = Field(default_factory=list)
 
 
 class GatewayConfig(BaseModel):

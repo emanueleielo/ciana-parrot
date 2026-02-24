@@ -1,5 +1,7 @@
 """Workspace shell backend — FilesystemBackend + allowlisted execute."""
 
+from __future__ import annotations
+
 import asyncio
 import shlex
 import subprocess
@@ -50,9 +52,14 @@ class WorkspaceShellBackend(SandboxBackendProtocol, FilesystemBackend):
             return ExecuteResponse(output=denied, exit_code=1)
 
         try:
+            cmd_list = shlex.split(command)
+        except ValueError:
+            return ExecuteResponse(output="Error: malformed command.", exit_code=1)
+
+        try:
             result = subprocess.run(
-                command,
-                shell=True,
+                cmd_list,
+                shell=False,
                 capture_output=True,
                 text=True,
                 timeout=self._timeout,
@@ -83,8 +90,19 @@ class WorkspaceShellBackend(SandboxBackendProtocol, FilesystemBackend):
         return ExecuteResponse(output=output, exit_code=result.returncode, truncated=truncated)
 
 
+_SHELL_METACHARACTERS = set(";|&`$")
+
+
 def _check_allowed(command: str) -> str | None:
     """Return error message if command is not allowed, None if OK."""
+    # Reject shell metacharacters before parsing to prevent command chaining
+    for ch in command:
+        if ch in _SHELL_METACHARACTERS:
+            return (
+                f"Error: shell metacharacter '{ch}' is not allowed. "
+                f"Run each command separately instead of chaining them."
+            )
+
     try:
         tokens = shlex.split(command)
     except ValueError:

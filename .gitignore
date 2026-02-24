@@ -18,6 +18,7 @@ workspace/checkpoints.db*
 logs/
 
 # Python
+.coverage
 .venv/
 __pycache__/
 *.pyc

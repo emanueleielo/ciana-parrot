@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Unified host gateway — runs on host, executes allowed commands for the Docker container."""
 
+from __future__ import annotations
+
 import hmac
 import json
 import os
@@ -9,6 +11,9 @@ import subprocess
 import sys
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+
+MAX_CONTENT_LENGTH = 1_048_576  # 1 MB
+MAX_TIMEOUT = 600  # 10 minutes
 
 # Build allowlists from config, with standalone fallback.
 try:
@@ -22,9 +27,14 @@ try:
     _cfg = load_config()
     PORT = _cfg.gateway.port
     TOKEN = _cfg.gateway.token or ""
+    DEFAULT_TIMEOUT = _cfg.gateway.default_timeout
     _ALLOWLISTS: dict[str, set[str]] = {}
+    _CWD_ALLOWLISTS: dict[str, list[str]] = {}
     for bridge_name, bdef in _cfg.gateway.bridges.items():
         _ALLOWLISTS[bridge_name] = set(bdef.allowed_commands)
+        _CWD_ALLOWLISTS[bridge_name] = [
+            os.path.realpath(os.path.expanduser(p)) for p in bdef.allowed_cwd
+        ]
 except Exception as e:
     import traceback
     sys.stderr.write(f"[gateway] WARNING: Failed to load config ({e}), using env-var fallback\n")
@@ -32,8 +42,10 @@ except Exception as e:
     _cfg = None
     PORT = int(os.environ.get("GATEWAY_PORT", os.environ.get("CC_BRIDGE_PORT", "9842")))
     TOKEN = os.environ.get("GATEWAY_TOKEN", os.environ.get("CC_BRIDGE_TOKEN", ""))
+    DEFAULT_TIMEOUT = 30
     # Standalone fallback: only claude-code bridge with "claude" command
     _ALLOWLISTS = {"claude-code": {"claude"}}
+    _CWD_ALLOWLISTS = {}
 
 
 def validate_request(data: dict, allowlists: dict[str, set[str]]) -> tuple[bool, int, str]:
@@ -58,6 +70,26 @@ def validate_request(data: dict, allowlists: dict[str, set[str]]) -> tuple[bool,
         return False, 403, f"command '{cmd_basename}' not allowed for bridge '{bridge}'"
 
     return True, 0, ""
+
+
+def validate_cwd(cwd: str | None, bridge: str, cwd_allowlists: dict[str, list[str]]) -> tuple[bool, str]:
+    """Validate that cwd is under an allowed directory for the bridge.
+
+    Returns (ok, error_message). If ok is True, error_message is unused.
+    """
+    if not cwd:
+        return True, ""
+
+    allowed_dirs = cwd_allowlists.get(bridge, [])
+    if not allowed_dirs:
+        return False, f"cwd not allowed for bridge '{bridge}' (no allowed_cwd configured)"
+
+    real_cwd = os.path.realpath(cwd)
+    for allowed in allowed_dirs:
+        if real_cwd == allowed or real_cwd.startswith(allowed + os.sep):
+            return True, ""
+
+    return False, f"cwd '{cwd}' is not under any allowed directory for bridge '{bridge}'"
 
 
 class GatewayHandler(BaseHTTPRequestHandler):
@@ -89,14 +121,30 @@ class GatewayHandler(BaseHTTPRequestHandler):
             return
 
         cmd = data["cmd"]
+        bridge = data["bridge"]
         cwd = data.get("cwd")
         timeout = data.get("timeout", 0)
+
+        # Validate cwd against per-bridge allowlist
+        cwd_ok, cwd_error = validate_cwd(cwd, bridge, _CWD_ALLOWLISTS)
+        if not cwd_ok:
+            self._respond(403, {"error": cwd_error})
+            return
+
+        # Validate and clamp timeout
+        if not isinstance(timeout, (int, float)):
+            timeout = 0
+        if timeout < 0:
+            timeout = 0
+        if timeout > MAX_TIMEOUT:
+            timeout = MAX_TIMEOUT
 
         env = os.environ.copy()
         env.pop("CLAUDE_CODE", None)
         env.pop("CLAUDECODE", None)
         effective_cwd = cwd if cwd and os.path.isdir(cwd) else None
-        effective_timeout = None if timeout == 0 else timeout
+        # timeout=0 means "use default from config", not "infinite"
+        effective_timeout = DEFAULT_TIMEOUT if timeout == 0 else timeout
 
         try:
             result = subprocess.run(
@@ -124,8 +172,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
     # --- Helpers ---
 
     def _check_auth(self) -> bool:
-        if not TOKEN:
-            return True
         auth = self.headers.get("Authorization", "")
         expected = f"Bearer {TOKEN}"
         if hmac.compare_digest(auth, expected):
@@ -136,6 +182,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
     def _read_json(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length < 0 or length > MAX_CONTENT_LENGTH:
+                self._respond(413, {"error": f"request body too large (max {MAX_CONTENT_LENGTH} bytes)"})
+                return None
             return json.loads(self.rfile.read(length))
         except (ValueError, json.JSONDecodeError):
             self._respond(400, {"error": "invalid JSON"})
@@ -154,12 +203,15 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # Require authentication token
+    if not TOKEN:
+        sys.stderr.write("[gateway] FATAL: GATEWAY_TOKEN is not set. "
+                         "The gateway requires authentication to prevent unauthorized access.\n")
+        sys.exit(1)
+
     print(f"Host gateway on 0.0.0.0:{PORT}")
     print(f"Bridges: {', '.join(_ALLOWLISTS.keys()) or '(none)'}")
-    if TOKEN:
-        print("Auth: enabled")
-    else:
-        print("Auth: disabled (set GATEWAY_TOKEN to enable)")
+    print("Auth: enabled")
     server = ThreadingHTTPServer(("0.0.0.0", PORT), GatewayHandler)
     server.daemon_threads = True
 

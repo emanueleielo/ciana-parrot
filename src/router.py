@@ -24,6 +24,8 @@ class MessageRouter:
         self._workspace = config.agent.workspace
         self._data_dir = config.agent.data_dir
         self._allowed_users = self._load_allowed_users()
+        if not self._allowed_users:
+            logger.warning("No allowed_users configured for any channel — bot is open to ALL users")
         # Track session resets (persisted so /new survives container restarts)
         self._session_store = JsonStore(Path(self._data_dir, "session_counters.json"))
         self._session_counters: dict[str, int] = {
@@ -169,7 +171,7 @@ class MessageRouter:
             agent_resp = extract_agent_response(result)
         except Exception as e:
             logger.exception("Agent error for thread %s", thread_id)
-            agent_resp = AgentResponse(text=f"Sorry, I encountered an error: {e}")
+            agent_resp = AgentResponse(text="Sorry, I encountered an error. Please try again.")
 
         # Log response
         self._log_message(thread_id, "assistant", agent_resp.text, msg)

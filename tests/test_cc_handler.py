@@ -662,4 +662,4 @@ class TestProcessMessageLocked:
         placeholder.delete.assert_awaited_once()
         mock_send.assert_called_once()
         text = mock_send.call_args[0][1]
-        assert "boom" in text
+        assert "error" in text.lower()

@@ -5,10 +5,10 @@ import io
 from unittest.mock import patch, MagicMock
 import subprocess
 
-from src.gateway.server import GatewayHandler
+from src.gateway.server import GatewayHandler, validate_cwd
 
 
-def _make_handler(method, path, body=None, headers=None, token=""):
+def _make_handler(method, path, body=None, headers=None, token="test-token"):
     """Create a GatewayHandler with mocked I/O for testing.
 
     Returns (handler, wfile) where wfile is a BytesIO capturing response body.
@@ -36,7 +36,10 @@ def _make_handler(method, path, body=None, headers=None, token=""):
             headers["Content-Length"] = str(len(body_bytes))
             handler.headers = headers
         else:
-            handler.headers = {"Content-Length": str(len(body_bytes))}
+            handler.headers = {
+                "Content-Length": str(len(body_bytes)),
+                "Authorization": f"Bearer {token}",
+            }
     else:
         handler.rfile = io.BytesIO(b"")
         handler.headers = headers if headers is not None else {}
@@ -69,8 +72,9 @@ class TestDoGet:
 
 
 class TestDoPost:
-    @patch("src.gateway.server.TOKEN", "")
+    @patch("src.gateway.server.TOKEN", "test-token")
     @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
+    @patch("src.gateway.server._CWD_ALLOWLISTS", {})
     @patch("src.gateway.server.subprocess")
     def test_execute_success(self, mock_subprocess):
         mock_result = MagicMock()
@@ -90,8 +94,9 @@ class TestDoPost:
         assert resp["stderr"] == ""
         assert resp["returncode"] == 0
 
-    @patch("src.gateway.server.TOKEN", "")
+    @patch("src.gateway.server.TOKEN", "test-token")
     @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
+    @patch("src.gateway.server._CWD_ALLOWLISTS", {})
     @patch("src.gateway.server.subprocess")
     def test_execute_subprocess_timeout(self, mock_subprocess):
         mock_subprocess.run.side_effect = subprocess.TimeoutExpired(cmd=["claude"], timeout=30)
@@ -106,8 +111,9 @@ class TestDoPost:
         assert "timed out" in resp["stderr"].lower()
         assert resp["returncode"] == -1
 
-    @patch("src.gateway.server.TOKEN", "")
+    @patch("src.gateway.server.TOKEN", "test-token")
     @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
+    @patch("src.gateway.server._CWD_ALLOWLISTS", {})
     @patch("src.gateway.server.subprocess")
     def test_execute_subprocess_error(self, mock_subprocess):
         mock_subprocess.run.side_effect = OSError("No such file")
@@ -121,7 +127,7 @@ class TestDoPost:
         resp = _get_response_body(wfile)
         assert "error" in resp
 
-    @patch("src.gateway.server.TOKEN", "")
+    @patch("src.gateway.server.TOKEN", "test-token")
     @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
     def test_execute_invalid_command(self):
         body = {"bridge": "claude-code", "cmd": ["bash", "-c", "echo hi"]}
@@ -132,7 +138,7 @@ class TestDoPost:
         resp = _get_response_body(wfile)
         assert "not allowed" in resp["error"]
 
-    @patch("src.gateway.server.TOKEN", "")
+    @patch("src.gateway.server.TOKEN", "test-token")
     def test_execute_not_found_path(self):
         body = {"bridge": "claude-code", "cmd": ["claude"]}
         handler, wfile = _make_handler("POST", "/execute", body=body)
@@ -143,11 +149,6 @@ class TestDoPost:
 
 
 class TestCheckAuth:
-    @patch("src.gateway.server.TOKEN", "")
-    def test_no_token_configured(self):
-        handler, _ = _make_handler("POST", "/execute", headers={})
-        assert handler._check_auth() is True
-
     @patch("src.gateway.server.TOKEN", "secret123")
     def test_valid_token(self):
         headers = {"Authorization": "Bearer secret123"}
@@ -163,6 +164,14 @@ class TestCheckAuth:
         handler.send_response.assert_called_once_with(401)
         body = _get_response_body(wfile)
         assert "unauthorized" in body["error"]
+
+    @patch("src.gateway.server.TOKEN", "secret123")
+    def test_missing_token_rejected(self):
+        headers = {}
+        handler, wfile = _make_handler("POST", "/execute", headers=headers)
+        result = handler._check_auth()
+        assert result is False
+        handler.send_response.assert_called_once_with(401)
 
 
 class TestReadJson:
@@ -181,3 +190,138 @@ class TestReadJson:
         handler.send_response.assert_called_once_with(400)
         body = _get_response_body(wfile)
         assert "invalid JSON" in body["error"]
+
+    def test_body_too_large(self):
+        handler, wfile = _make_handler("POST", "/execute")
+        handler.headers = {"Content-Length": "2000000"}
+        handler.rfile = io.BytesIO(b"x" * 100)
+        result = handler._read_json()
+        assert result is None
+        handler.send_response.assert_called_once_with(413)
+        body = _get_response_body(wfile)
+        assert "too large" in body["error"]
+
+    def test_negative_content_length(self):
+        handler, wfile = _make_handler("POST", "/execute")
+        handler.headers = {"Content-Length": "-1"}
+        handler.rfile = io.BytesIO(b"")
+        result = handler._read_json()
+        assert result is None
+        handler.send_response.assert_called_once_with(413)
+
+
+class TestCwdValidation:
+    def test_no_cwd_always_allowed(self):
+        ok, _ = validate_cwd(None, "claude-code", {})
+        assert ok is True
+
+    def test_cwd_rejected_when_no_allowlist(self):
+        ok, error = validate_cwd("/etc", "spotify", {})
+        assert ok is False
+        assert "not allowed" in error
+
+    def test_cwd_allowed_under_configured_dir(self, tmp_path):
+        allowed = str(tmp_path)
+        sub = tmp_path / "subdir"
+        sub.mkdir()
+        ok, _ = validate_cwd(str(sub), "claude-code", {"claude-code": [allowed]})
+        assert ok is True
+
+    def test_cwd_exact_match(self, tmp_path):
+        allowed = str(tmp_path)
+        ok, _ = validate_cwd(allowed, "claude-code", {"claude-code": [allowed]})
+        assert ok is True
+
+    def test_cwd_rejected_outside_allowed(self, tmp_path):
+        allowed = str(tmp_path / "safe")
+        (tmp_path / "safe").mkdir()
+        ok, error = validate_cwd(str(tmp_path / "unsafe"), "claude-code",
+                                  {"claude-code": [allowed]})
+        assert ok is False
+        assert "not under any allowed" in error
+
+    def test_cwd_symlink_resolved(self, tmp_path):
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        symlink = tmp_path / "link"
+        symlink.symlink_to(real_dir)
+        ok, _ = validate_cwd(str(symlink), "claude-code",
+                              {"claude-code": [str(real_dir)]})
+        assert ok is True
+
+    def test_cwd_symlink_escape_rejected(self, tmp_path):
+        safe = tmp_path / "safe"
+        safe.mkdir()
+        unsafe = tmp_path / "unsafe"
+        unsafe.mkdir()
+        symlink = safe / "escape"
+        symlink.symlink_to(unsafe)
+        ok, _ = validate_cwd(str(symlink), "claude-code",
+                              {"claude-code": [str(safe)]})
+        assert ok is False
+
+
+class TestTimeoutValidation:
+    @patch("src.gateway.server.TOKEN", "test-token")
+    @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
+    @patch("src.gateway.server._CWD_ALLOWLISTS", {})
+    @patch("src.gateway.server.DEFAULT_TIMEOUT", 30)
+    @patch("src.gateway.server.subprocess")
+    def test_negative_timeout_clamped(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+        mock_subprocess.run.return_value = mock_result
+        mock_subprocess.TimeoutExpired = subprocess.TimeoutExpired
+
+        body = {"bridge": "claude-code", "cmd": ["claude"], "timeout": -5}
+        handler, wfile = _make_handler("POST", "/execute", body=body)
+        handler.do_POST()
+
+        handler.send_response.assert_called_once_with(200)
+        # timeout=0 after clamping → uses DEFAULT_TIMEOUT (30)
+        _, kwargs = mock_subprocess.run.call_args
+        assert kwargs["timeout"] == 30
+
+    @patch("src.gateway.server.TOKEN", "test-token")
+    @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
+    @patch("src.gateway.server._CWD_ALLOWLISTS", {})
+    @patch("src.gateway.server.DEFAULT_TIMEOUT", 30)
+    @patch("src.gateway.server.subprocess")
+    def test_huge_timeout_clamped(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+        mock_subprocess.run.return_value = mock_result
+        mock_subprocess.TimeoutExpired = subprocess.TimeoutExpired
+
+        body = {"bridge": "claude-code", "cmd": ["claude"], "timeout": 99999}
+        handler, wfile = _make_handler("POST", "/execute", body=body)
+        handler.do_POST()
+
+        handler.send_response.assert_called_once_with(200)
+        _, kwargs = mock_subprocess.run.call_args
+        assert kwargs["timeout"] == 600  # MAX_TIMEOUT
+
+    @patch("src.gateway.server.TOKEN", "test-token")
+    @patch("src.gateway.server._ALLOWLISTS", {"claude-code": {"claude"}})
+    @patch("src.gateway.server._CWD_ALLOWLISTS", {})
+    @patch("src.gateway.server.DEFAULT_TIMEOUT", 30)
+    @patch("src.gateway.server.subprocess")
+    def test_zero_timeout_uses_default(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_result.returncode = 0
+        mock_subprocess.run.return_value = mock_result
+        mock_subprocess.TimeoutExpired = subprocess.TimeoutExpired
+
+        body = {"bridge": "claude-code", "cmd": ["claude"], "timeout": 0}
+        handler, wfile = _make_handler("POST", "/execute", body=body)
+        handler.do_POST()
+
+        handler.send_response.assert_called_once_with(200)
+        _, kwargs = mock_subprocess.run.call_args
+        assert kwargs["timeout"] == 30  # DEFAULT_TIMEOUT

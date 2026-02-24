@@ -58,6 +58,7 @@ gateway:
   bridges:
     claude-code:
       allowed_commands: ["claude"]
+      allowed_cwd: ["~/Documents", "~/Projects"]
     apple-reminders:
       allowed_commands: ["remindctl"]
     things:
