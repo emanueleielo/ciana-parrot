@@ -1,16 +1,45 @@
 # Changelog
 
-## 0.3.1 — 2026-02-23
+All notable changes to this project will be documented in this file.
 
-### Refactored
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- Extracted `ToolDetailsManager` from duplicated tool-details expand/collapse logic in `TelegramChannel` and `ClaudeCodeHandler` into shared `src/channels/telegram/tool_details.py`
+## [0.4.0] — 2026-02-25
 
 ### Added
 
+- Multi-tier model router with dynamic tier switching (`RoutingChatModel`, `switch_model` tool, per-task tier in scheduler)
+- One-command installer (`install.sh`) with dry-run support and gateway dependency setup
+- 14 new skills for host gateway bridges (1Password, Apple Reminders, Bear Notes, BluCLI, CamSnap, iMessage, Obsidian, OpenHue, Peekaboo, Sonos, Spotify, Things, Troubleshooting, WhatsApp)
+- WhatsApp `wacli-daemon` for background sync management
+- Comprehensive documentation site (user guides, architecture, contributing, configuration reference)
+- Skill creation guide
+
+### Changed
+
+- Host bridge system refactored into gateway architecture with client/server split and `host_execute` tool
+- Enhanced error handling, input validation, and security measures across multiple modules
+- Improved tool display names, bridge icons, and session counter sync
+
+### Fixed
+
+- Gateway `timeout=0` now treated as no limit instead of default timeout
+- Installer dry-run prerequisite check and gateway dependency fallback
+- Installer crash on awk corruption and path consistency issues
+
+### Security
+
+- Pre-commit hook for gitleaks secret scanning
+
+## [0.3.1] — 2026-02-23
+
+### Changed
+
+- Extracted `ToolDetailsManager` from duplicated tool-details expand/collapse logic in `TelegramChannel` and `ClaudeCodeHandler` into shared `src/channels/telegram/tool_details.py`
 - 13 tests for `ToolDetailsManager` (store, buttons, expand/collapse, prefix isolation, eviction, BadRequest fallback)
 
-## 0.3.0 — 2026-02-22
+## [0.3.0] — 2026-02-22
 
 ### Added
 
@@ -24,15 +53,10 @@
 
 - Dockerfile hardening for skill execution environment
 - Updated `.gitignore` with runtime data entries
-
-### Docs
-
 - Added parrot SVG logo and cianaparrot.dev website badge to README
-- Added DeepAgents framework reference to README
 - Rebranded host bridge system as secure host gateway architecture in README
-- Updated README intro, key features, and bridge section with security-first messaging
 
-## 0.2.0 — 2026-02-19
+## [0.2.0] — 2026-02-19
 
 ### Added
 
@@ -55,18 +79,15 @@
 - Default LLM provider updated to `claude-sonnet-4-6` with temperature 0
 - Config comments translated to English
 - Protected runtime data and credentials from repository
-
-### Improved
-
 - Extracted magic numbers to named constants
 - Narrowed broad exception handlers to specific exception types
 - Removed unused imports and variables
 - Updated architecture diagram (PNG → SVG)
 - Updated README with bridge system, observability, and accurate project structure
 
-## 0.1.0 — 2026-02-15
+## [0.1.0] — 2026-02-15
 
-Initial release.
+### Added
 
 - DeepAgents-based agent with memory, filesystem sandbox, and session persistence
 - Telegram channel with trigger detection, commands, typing indicator
@@ -78,3 +99,9 @@ Initial release.
 - User allowlist per channel
 - Markdown-based identity, agent instructions, and persistent memory
 - Docker-only deployment with Makefile
+
+[0.4.0]: https://github.com/emanueleielo/ciana-parrot/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/emanueleielo/ciana-parrot/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/emanueleielo/ciana-parrot/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/emanueleielo/ciana-parrot/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/emanueleielo/ciana-parrot/releases/tag/v0.1.0
