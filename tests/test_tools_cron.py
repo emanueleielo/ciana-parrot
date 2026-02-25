@@ -132,6 +132,39 @@ class TestScheduleTask:
         assert data[0]["type"] == "once"
 
     @pytest.mark.asyncio
+    async def test_with_model_tier(self, tmp_path):
+        tasks_file = _init_cron(tmp_path)
+        set_current_context("telegram", "123")
+
+        result = await schedule_task.ainvoke({
+            "prompt": "analyze portfolio",
+            "schedule_type": "cron",
+            "schedule_value": "0 9 * * *",
+            "model_tier": "advanced",
+        })
+
+        assert "Task scheduled" in result
+        data = json.loads(tasks_file.read_text())
+        assert len(data) == 1
+        assert data[0]["model_tier"] == "advanced"
+
+    @pytest.mark.asyncio
+    async def test_without_model_tier(self, tmp_path):
+        tasks_file = _init_cron(tmp_path)
+        set_current_context("telegram", "123")
+
+        result = await schedule_task.ainvoke({
+            "prompt": "say hello",
+            "schedule_type": "cron",
+            "schedule_value": "* * * * *",
+        })
+
+        assert "Task scheduled" in result
+        data = json.loads(tasks_file.read_text())
+        assert len(data) == 1
+        assert "model_tier" not in data[0]
+
+    @pytest.mark.asyncio
     async def test_invalid_type(self, tmp_path):
         _init_cron(tmp_path)
         set_current_context("telegram", "123")

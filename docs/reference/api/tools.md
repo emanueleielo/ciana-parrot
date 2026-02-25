@@ -3,6 +3,7 @@
 ::: src.tools.web
 ::: src.tools.cron
 ::: src.tools.host
+::: src.tools.model_router
 
 ---
 
@@ -15,6 +16,7 @@ Tools are agent-callable functions decorated with `@tool` from `langchain_core.t
 - `src/tools/web.py` -- web search and URL fetching
 - `src/tools/cron.py` -- scheduled task management
 - `src/tools/host.py` -- host command execution via gateway
+- `src/tools/model_router.py` -- model tier switching and routing
 
 ---
 
@@ -301,3 +303,69 @@ async def host_execute(bridge: str, command: str, timeout: int = 0) -> str:
 - Invalid syntax: `"Error: invalid command syntax: {error}"`
 - Empty command: `"Error: empty command."`
 - Non-zero exit: `"Command failed (exit {code}):\n{stderr}"`
+
+---
+
+## Model Router Tools
+
+:octicons-file-code-16: `src/tools/model_router.py`
+
+This module provides the `RoutingChatModel` (the agent's LLM wrapper) and the `switch_model` tool. Only active when `model_router.enabled: true` in config.
+
+### `RoutingChatModel`
+
+```python
+class RoutingChatModel(BaseChatModel):
+    tier_models: dict[str, Any]      # tier_name -> LLM instance
+    tier_labels: dict[str, str]      # tier_name -> "provider:model" for display
+    default_tier: str = "standard"
+```
+
+A `BaseChatModel` subclass that delegates to the active tier's underlying model. Uses a `ContextVar(_active_tier)` to determine which tier to use per-asyncio-task.
+
+**Key methods:**
+
+- **`bind_tools(tools, **kwargs)`** -- Pre-binds tools on ALL tier models, returns a `RunnableLambda` that resolves the active tier dynamically on each invocation. Also injects a `[Current model: provider:model (tier: name)]` note into the system message.
+- **`_generate()` / `_agenerate()`** -- Delegate to the current tier's model (fallback path for direct calls).
+
+### `init_model_router_tools(tier_models, default_tier="standard")`
+
+Initialize model router with pre-created tier models.
+
+```python
+def init_model_router_tools(tier_models: dict[str, Any], default_tier: str = "standard") -> None
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tier_models` | `dict[str, Any]` | Map of tier name to initialized LLM instance |
+| `default_tier` | `str` | Tier to use when no explicit tier is set |
+
+### `switch_model(tier="expert") -> str` {: #switch-model }
+
+Switch to a different model tier for the rest of the current conversation turn.
+
+```python
+@tool
+async def switch_model(tier: str = "expert") -> str:
+    """Switch to a different model tier for the rest of this conversation turn."""
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tier` | `str` | `"expert"` | Target tier name (must exist in configured tiers) |
+
+**Returns:** `"Switched to tier '{tier}'."` or `"Unknown tier '{tier}'. Available: {list}"`.
+
+**Behavior:** Sets `_active_tier` ContextVar. The switch takes effect on the **next** agent loop step — the new model receives the full conversation history, all tools, and memory.
+
+### `set_active_tier(tier)` / `reset_active_tier()`
+
+Programmatic tier control used by the scheduler.
+
+```python
+def set_active_tier(tier: str) -> None    # Set _active_tier for current asyncio task
+def reset_active_tier() -> None           # Reset _active_tier to None (default)
+```
+
+Used in `Scheduler._execute_task()` with a `try/finally` pattern to ensure cleanup.

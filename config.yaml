@@ -16,6 +16,32 @@ provider:
   # For Ollama:
   # base_url: "http://localhost:11434"
 
+# Model router — multi-tier LLM support with in-chat model switching.
+# When enabled, wraps the agent in a RoutingChatModel that switches between
+# tier models via the switch_model tool. Scheduled tasks can specify a
+# model_tier to run on a specific tier with full tools/memory.
+# Override in config.local.yaml (gitignored) to activate with your models.
+# model_router:
+#   enabled: true
+#   default_tier: "standard"    # Tier used by default (must exist in tiers)
+#   tiers:
+#     lite:
+#       name: "openai"
+#       model: "gpt-4o-mini"
+#       api_key: "${OPENAI_API_KEY}"
+#     standard:
+#       name: "openai"
+#       model: "gpt-4o"
+#       api_key: "${OPENAI_API_KEY}"
+#     advanced:
+#       name: "anthropic"
+#       model: "claude-sonnet-4-6"
+#       api_key: "${ANTHROPIC_API_KEY}"
+#     expert:
+#       name: "anthropic"
+#       model: "claude-opus-4-6"
+#       api_key: "${ANTHROPIC_API_KEY}"
+
 channels:
   telegram:
     enabled: true

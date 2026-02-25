@@ -122,10 +122,28 @@ Due when: current time >= target timestamp. Automatically deactivated (`"active"
 
 Each due task runs as an independent `asyncio.Task`:
 
-1. Agent invoked with `thread_id = "scheduler_{task_id}"`
-2. Response extracted via `extract_agent_response()`
-3. Result sent to the originating channel/chat via `channel.send()` with `disable_notification=True`
-4. If channel/chat not available, result is logged and discarded
+1. If the task has `model_tier`, calls `set_active_tier(tier)` so the `RoutingChatModel` uses that tier's LLM
+2. Agent invoked with `thread_id = "scheduler_{task_id}"` — the agent runs with full tools, memory, and context on the specified tier
+3. `reset_active_tier()` in a `finally` block ensures cleanup even on errors
+4. Response extracted via `extract_agent_response()`
+5. Result sent to the originating channel/chat via `channel.send()` with `disable_notification=True`
+6. If channel/chat not available, result is logged and discarded
 
 !!! info
     Scheduler tasks use their own thread IDs (`scheduler_*`), so they don't interfere with user conversation history.
+
+### `model_tier` Field
+
+Tasks can specify a `model_tier` to run on a specific LLM tier:
+
+```json
+{
+  "id": "abc12345",
+  "prompt": "Analyze my portfolio in depth",
+  "type": "cron",
+  "value": "0 9 * * *",
+  "model_tier": "advanced"
+}
+```
+
+When `model_tier` is set, the scheduler sets `_active_tier` before invoking the agent. Unlike the previous raw LLM approach, the agent runs with **all tools and memory** on the specified tier — it's the full agent, just on a different model.

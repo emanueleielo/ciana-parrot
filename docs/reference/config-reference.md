@@ -66,6 +66,11 @@ transcription:
   base_url: ""                       # (26)!
   timeout: 30                        # (27)!
 
+model_router:
+  enabled: false                     # (28a)!
+  default_tier: "standard"           # (28b)!
+  tiers: {}                          # (28c)!
+
 gateway:
   enabled: false                     # (28)!
   url: "http://host.docker.internal:9842"  # (29)!
@@ -118,6 +123,9 @@ logging:
 25. **`str?`** -- API key for the transcription provider. Empty string is converted to `None`.
 26. **`str?`** -- Custom endpoint for the transcription provider. Empty string is converted to `None`.
 27. **`int`** -- Timeout in seconds for transcription API calls.
+28a. **`bool`** -- Enable multi-tier model routing. When enabled, the agent uses a `RoutingChatModel` that wraps all tier models and adds a `switch_model` tool. The `provider` section is ignored — the `default_tier` model is used instead.
+28b. **`str`** -- The tier used by default. Must be a key in `tiers` when `enabled: true`. Validated at startup.
+28c. **`dict[str, TierConfig]`** -- Map of tier names to model configurations. Each tier has the same fields as `provider` (`name`, `model`, `api_key`, `temperature`, `max_tokens`, `base_url`).
 28. **`bool`** -- Enable the host gateway system. When enabled, the agent can execute commands on the host via the `host_execute` tool.
 29. **`str?`** -- Gateway URL as seen from the Docker container. `host.docker.internal` resolves to the Docker host on macOS/Windows.
 30. **`str?`** -- Bearer token for gateway authentication. Must match the token configured on the gateway server side.
@@ -326,6 +334,62 @@ Voice message transcription using OpenAI Whisper or Groq. When enabled, voice an
 
 ---
 
+### `model_router`
+
+Multi-tier model routing with in-chat model switching. When enabled, the agent runs on a `RoutingChatModel` that wraps multiple LLM tiers behind a single interface. The agent can call `switch_model(tier="expert")` to upgrade to a stronger model mid-conversation — the switch takes effect on the next agent step with full tools, memory, and context preserved.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | `bool` | `false` | Enable model routing (replaces `provider` as the agent's LLM) |
+| `default_tier` | `str` | `"standard"` | Tier used by default. Must exist in `tiers` when enabled |
+| `tiers` | `dict[str, TierConfig]` | `{}` | Map of tier names to model configurations |
+
+#### `tiers.<name>` (TierConfig)
+
+Each tier has the same fields as `provider`:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `name` | `str` | — | Provider name (`openai`, `anthropic`, `google-genai`, etc.) |
+| `model` | `str` | — | Model identifier |
+| `api_key` | `str?` | `None` | API key |
+| `temperature` | `float?` | `None` | Sampling temperature, `0.0`--`2.0` |
+| `max_tokens` | `int?` | `None` | Max response tokens |
+| `base_url` | `str?` | `None` | Custom API endpoint |
+
+??? example "Model router configuration"
+
+    ```yaml
+    model_router:
+      enabled: true
+      default_tier: "standard"
+      tiers:
+        lite:
+          name: "openai"
+          model: "gpt-4o-mini"
+          api_key: "${OPENAI_API_KEY}"
+        standard:
+          name: "openai"
+          model: "gpt-4o"
+          api_key: "${OPENAI_API_KEY}"
+        advanced:
+          name: "openai"
+          model: "gpt-5"
+          api_key: "${OPENAI_API_KEY}"
+        expert:
+          name: "openai"
+          model: "gpt-5"
+          api_key: "${OPENAI_API_KEY}"
+    ```
+
+!!! note "Validation"
+    When `enabled: true`, `default_tier` must be a key in `tiers`. Empty `default_tier` is rejected. These are validated at startup — misconfiguration produces a clear error before the bot starts.
+
+!!! tip "Override in config.local.yaml"
+    Keep `model_router` disabled in `config.yaml` and enable it in `config.local.yaml` (gitignored) with your API keys and tier setup.
+
+---
+
 ### `gateway`
 
 The host gateway system allows the agent (running inside Docker) to execute commands on the host machine through a secure HTTP bridge.
@@ -444,6 +508,7 @@ class AppConfig(BaseModel):
     skills: SkillsConfig
     web: WebConfig
     transcription: TranscriptionConfig
+    model_router: ModelRouterConfig
     gateway: GatewayConfig
     claude_code: ClaudeCodeConfig
     logging: LoggingConfig

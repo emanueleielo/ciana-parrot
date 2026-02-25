@@ -19,7 +19,7 @@ ALLOWED_COMMANDS = frozenset({
     "jq",                               # JSON processing
     "ffmpeg", "ffprobe",                # Media processing
     "nano-pdf",                         # PDF editing (Gemini-powered)
-    "echo", "date", "env", "whoami",    # Basic utils
+    "echo", "date", "whoami",            # Basic utils
     "tar", "gzip", "gunzip", "unzip",   # Archives
     "wc", "sort", "uniq", "tr", "cut",  # Text processing (on piped data)
     "base64", "sha256sum", "md5sum",    # Encoding/hashing

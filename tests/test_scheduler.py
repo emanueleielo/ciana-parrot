@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.config import AppConfig, SchedulerConfig
+from src.tools.model_router import _active_tier, init_model_router_tools
 from src.scheduler import Scheduler
 
 
@@ -575,3 +576,126 @@ class TestOnceTaskAutoDeactivation:
         updated = _read_tasks(tasks_path)
         assert updated[0]["active"] is True
         assert updated[0]["last_run"] is not None
+
+
+# ---------------------------------------------------------------------------
+# TestSchedulerTierExecution
+# ---------------------------------------------------------------------------
+
+class TestSchedulerTierExecution:
+    """Tests for tier-based execution via _active_tier in _execute_task."""
+
+    @pytest.mark.asyncio
+    async def test_task_with_tier_sets_active_tier(self, tmp_path):
+        """A task with model_tier should set _active_tier before agent.ainvoke."""
+        from src.tools.cron import init_cron_tools
+
+        config = AppConfig(
+            scheduler=SchedulerConfig(data_file=str(tmp_path / "tasks.json")),
+        )
+        init_cron_tools(config.scheduler)
+
+        captured_tier = []
+
+        async def capture_tier(*args, **kwargs):
+            captured_tier.append(_active_tier.get())
+            mock_msg = MagicMock(type="ai", content="Tier response", tool_calls=[])
+            return {"messages": [mock_msg]}
+
+        main_agent = AsyncMock()
+        main_agent.ainvoke.side_effect = capture_tier
+
+        mock_channel = MagicMock()
+        mock_channel.send = AsyncMock()
+
+        sched = Scheduler(main_agent, config, channels={"telegram": mock_channel})
+
+        task = {
+            "id": "t1",
+            "prompt": "quick check",
+            "type": "once",
+            "value": "2020-01-01T00:00:00+00:00",
+            "last_run": None,
+            "active": True,
+            "channel": "telegram",
+            "chat_id": "123",
+            "model_tier": "lite",
+        }
+
+        await sched._execute_task(task)
+
+        # Tier was set during ainvoke
+        assert captured_tier == ["lite"]
+        # Tier is reset after execution
+        assert _active_tier.get() is None
+        main_agent.ainvoke.assert_called_once()
+        mock_channel.send.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_task_without_tier_uses_agent(self, tmp_path):
+        """A task without model_tier should use the full agent without setting tier."""
+        from src.tools.cron import init_cron_tools
+
+        config = AppConfig(
+            scheduler=SchedulerConfig(data_file=str(tmp_path / "tasks.json")),
+        )
+        init_cron_tools(config.scheduler)
+
+        main_agent = AsyncMock()
+        mock_msg = MagicMock(type="ai", content="Agent response", tool_calls=[])
+        main_agent.ainvoke.return_value = {"messages": [mock_msg]}
+
+        mock_channel = MagicMock()
+        mock_channel.send = AsyncMock()
+
+        sched = Scheduler(main_agent, config, channels={"telegram": mock_channel})
+
+        task = {
+            "id": "t2",
+            "prompt": "complex task",
+            "type": "once",
+            "value": "2020-01-01T00:00:00+00:00",
+            "last_run": None,
+            "active": True,
+            "channel": "telegram",
+            "chat_id": "456",
+        }
+
+        await sched._execute_task(task)
+
+        main_agent.ainvoke.assert_called_once()
+        # No tier was set
+        assert _active_tier.get() is None
+
+    @pytest.mark.asyncio
+    async def test_tier_reset_on_agent_error(self, tmp_path):
+        """_active_tier should be reset even if agent.ainvoke raises."""
+        from src.tools.cron import init_cron_tools
+
+        config = AppConfig(
+            scheduler=SchedulerConfig(data_file=str(tmp_path / "tasks.json")),
+        )
+        init_cron_tools(config.scheduler)
+
+        main_agent = AsyncMock()
+        main_agent.ainvoke.side_effect = RuntimeError("boom")
+
+        sched = Scheduler(main_agent, config)
+
+        task = {
+            "id": "t3",
+            "prompt": "will fail",
+            "type": "once",
+            "value": "2020-01-01T00:00:00+00:00",
+            "last_run": None,
+            "active": True,
+            "channel": "telegram",
+            "chat_id": "789",
+            "model_tier": "expert",
+        }
+
+        # Should not propagate
+        await sched._execute_task(task)
+
+        # Tier is reset despite the error
+        assert _active_tier.get() is None

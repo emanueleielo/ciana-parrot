@@ -28,6 +28,7 @@ CianaParrot is a self-hosted AI personal assistant that runs on your own infrast
 ## Features
 
 - **Multi-provider LLM** — Anthropic, OpenAI, Google Gemini, Groq, Ollama, OpenRouter, vLLM
+- **Multi-tier model routing** — Configure multiple LLM tiers (lite → expert) and let the agent switch models mid-conversation for cost optimization
 - **Multi-channel** — Pluggable channel architecture, Telegram out of the box
 - **Host gateway** — Secure bridge system connecting the Docker sandbox to host CLI tools (Spotify, Reminders, iMessage, Things, Bear Notes, Obsidian, 1Password, HomeKit, and more)
 - **Scheduled tasks** — Cron, interval, and one-shot tasks the agent can create via chat

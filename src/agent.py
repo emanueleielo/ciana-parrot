@@ -14,6 +14,7 @@ from .config import AppConfig
 from .tools.web import web_search, web_fetch, init_web_tools
 from .tools.cron import schedule_task, list_tasks, cancel_task, init_cron_tools
 from .tools.host import host_execute, init_host_tools
+from .tools.model_router import switch_model, init_model_router_tools, RoutingChatModel
 from .transcription import init_transcription
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,11 @@ async def create_cianaparrot_agent(config: AppConfig):
     if config.provider.base_url:
         model_kwargs["base_url"] = config.provider.base_url
 
-    model = init_chat_model(
+    base_model = init_chat_model(
         f"{provider_name}:{model_name}",
         **model_kwargs,
     )
+    model = base_model  # may be replaced by RoutingChatModel below
     logger.info("LLM provider: %s:%s", provider_name, model_name)
 
     # Workspace
@@ -77,6 +79,45 @@ async def create_cianaparrot_agent(config: AppConfig):
     custom_tools = [web_search, web_fetch, schedule_task, list_tasks, cancel_task]
     if config.gateway.enabled:
         custom_tools.append(host_execute)
+
+    # Model router tiers
+    tier_models: dict = {}
+
+    if config.model_router.enabled and config.model_router.tiers:
+        default_tier = config.model_router.default_tier
+        for tier_name, tier_cfg in config.model_router.tiers.items():
+            try:
+                tier_kwargs = {}
+                if tier_cfg.temperature is not None:
+                    tier_kwargs["temperature"] = tier_cfg.temperature
+                if tier_cfg.max_tokens is not None:
+                    tier_kwargs["max_tokens"] = tier_cfg.max_tokens
+                if tier_cfg.base_url:
+                    tier_kwargs["base_url"] = tier_cfg.base_url
+                tier_models[tier_name] = init_chat_model(
+                    f"{tier_cfg.name}:{tier_cfg.model}", **tier_kwargs
+                )
+                logger.info("Model tier initialized: %s (%s:%s)", tier_name, tier_cfg.name, tier_cfg.model)
+            except Exception as e:
+                logger.warning("Failed to init tier '%s': %s", tier_name, e)
+
+        if tier_models:
+            init_model_router_tools(tier_models, default_tier=default_tier)
+            custom_tools.append(switch_model)
+            # Build label map for system prompt injection
+            tier_labels = {
+                name: f"{cfg.name}:{cfg.model}"
+                for name, cfg in config.model_router.tiers.items()
+                if name in tier_models
+            }
+            # Replace base model with RoutingChatModel
+            model = RoutingChatModel(
+                tier_models=tier_models,
+                tier_labels=tier_labels,
+                default_tier=default_tier,
+            )
+            logger.info("RoutingChatModel active (default_tier=%s, tiers=%s)",
+                        default_tier, sorted(tier_models.keys()))
 
     # MCP tools
     mcp_client = None

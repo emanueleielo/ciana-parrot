@@ -25,12 +25,13 @@ Factory function that builds the complete agent with all tools, memory, and pers
 ### Construction Sequence
 
 1. **Initialize tool configs** — calls `init_web_tools()`, `init_cron_tools()`, `init_host_tools()` (if gateway enabled), `init_transcription()` (if enabled)
-2. **Create LLM** — `init_chat_model("{provider}:{model}")` with optional temperature, max_tokens, base_url
-3. **Load memory files** — scans workspace for `IDENTITY.md`, `AGENT.md`, `MEMORY.md`
-4. **Load MCP tools** — `MultiServerMCPClient(config.mcp_servers)` if configured
-5. **Build tool list** — `[web_search, web_fetch, schedule_task, list_tasks, cancel_task]` + optionally `host_execute`
-6. **Create checkpointer** — `AsyncSqliteSaver` backed by `data/checkpoints.db`
-7. **Create agent** — `create_deep_agent()` with `WorkspaceShellBackend`
+2. **Create base LLM** — `init_chat_model("{provider}:{model}")` with optional temperature, max_tokens, base_url
+3. **Model router** (if `model_router.enabled`) — initializes all tier models, creates `RoutingChatModel` as the main model (replaces `provider`), adds `switch_model` tool. Each tier is pre-bound with tools via `bind_tools()`.
+4. **Load memory files** — scans workspace for `IDENTITY.md`, `AGENT.md`, `MEMORY.md`
+5. **Load MCP tools** — `MultiServerMCPClient(config.mcp_servers)` if configured
+6. **Build tool list** — `[web_search, web_fetch, schedule_task, list_tasks, cancel_task]` + optionally `host_execute` + optionally `switch_model`
+7. **Create checkpointer** — `AsyncSqliteSaver` backed by `data/checkpoints.db`
+8. **Create agent** — `create_deep_agent()` with `WorkspaceShellBackend`
 
 ### Usage
 

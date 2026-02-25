@@ -66,6 +66,7 @@ _TOOL_DISPLAY_NAMES: dict[str, str] = {
     "schedule_task": "Schedule",
     "list_tasks": "Tasks",
     "cancel_task": "Cancel Task",
+    "switch_model": "Switch Model",
     "read_file": "Read",
     "write_file": "Write",
     "edit_file": "Edit",
@@ -83,6 +84,9 @@ def resolve_display_name(tool_name: str, args: dict) -> str:
     if tool_name == "host_execute":
         bridge = args.get("bridge", "")
         return bridge.replace("-", " ").title() if bridge else "Host"
+    if tool_name == "switch_model":
+        tier = args.get("tier", "")
+        return f"Switch ({tier})" if tier else "Switch Model"
     return _TOOL_DISPLAY_NAMES.get(tool_name, "")
 
 

@@ -11,6 +11,7 @@ from croniter import croniter
 from .agent_response import extract_agent_response
 from .config import AppConfig
 from .tools.cron import get_tasks_lock
+from .tools.model_router import set_active_tier, reset_active_tier
 
 logger = logging.getLogger(__name__)
 
@@ -148,15 +149,28 @@ class Scheduler:
         return False
 
     async def _execute_task(self, task: dict) -> None:
-        """Execute a scheduled task and send the result to the originating channel."""
-        thread_id = f"scheduler_{task['id']}"
+        """Execute a scheduled task and send the result to the originating channel.
+
+        If the task has a model_tier, sets it as active tier so the
+        RoutingChatModel uses that tier's LLM (with full tools/memory).
+        """
         try:
-            result = await self._agent.ainvoke(
-                {"messages": [{"role": "user", "content": task["prompt"]}]},
-                config={"configurable": {"thread_id": thread_id}},
-            )
-            agent_resp = extract_agent_response(result)
-            response = agent_resp.text
+            tier = task.get("model_tier")
+            if tier:
+                set_active_tier(tier)
+                logger.info("Task %s: active tier set to '%s'", task["id"], tier)
+
+            try:
+                thread_id = f"scheduler_{task['id']}"
+                result = await self._agent.ainvoke(
+                    {"messages": [{"role": "user", "content": task["prompt"]}]},
+                    config={"configurable": {"thread_id": thread_id}},
+                )
+                agent_resp = extract_agent_response(result)
+                response = agent_resp.text
+            finally:
+                if tier:
+                    reset_active_tier()
 
             # Send result to the channel that created the task
             channel_name = task.get("channel")

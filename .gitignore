@@ -1,5 +1,6 @@
 # Secrets
 .env
+config.local.yaml
 
 # Runtime
 .gateway.pid

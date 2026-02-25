@@ -63,13 +63,14 @@ def _save_tasks(tasks: list[dict]) -> None:
 
 
 @tool
-async def schedule_task(prompt: str, schedule_type: str, schedule_value: str) -> str:
+async def schedule_task(prompt: str, schedule_type: str, schedule_value: str, model_tier: str = "") -> str:
     """Schedule a task to run later or on a recurring basis.
 
     Args:
         prompt: What the agent should do when the task runs.
         schedule_type: One of 'cron' (cron expression), 'interval' (seconds), 'once' (ISO timestamp).
         schedule_value: The schedule value matching the type.
+        model_tier: Optional model tier for execution (e.g. 'lite', 'advanced', 'expert'). Empty = default.
     """
     if schedule_type not in ("cron", "interval", "once"):
         return f"Invalid schedule_type: {schedule_type}. Use 'cron', 'interval', or 'once'."
@@ -108,6 +109,8 @@ async def schedule_task(prompt: str, schedule_type: str, schedule_value: str) ->
         "last_run": None,
         "active": True,
     }
+    if model_tier:
+        task["model_tier"] = model_tier
 
     async with _tasks_lock:
         tasks = _load_tasks()

@@ -65,7 +65,7 @@ def mock_agent() -> AsyncMock:
 @pytest.fixture(autouse=True)
 def reset_tool_globals():
     """Save/restore module-level globals between tests."""
-    from src.tools import web, cron, host
+    from src.tools import web, cron, host, model_router as mr_module
 
     from src import transcription
 
@@ -82,6 +82,9 @@ def reset_tool_globals():
         transcription._base_url,
         transcription._timeout,
     )
+    old_tier_models = mr_module._tier_models
+    old_available_tiers = mr_module._available_tiers
+    old_default_tier = mr_module._default_tier
     yield
     web._brave_api_key = old_brave
     web._fetch_timeout = old_timeout
@@ -96,6 +99,10 @@ def reset_tool_globals():
         transcription._base_url,
         transcription._timeout,
     ) = old_transcription
+    mr_module._tier_models = old_tier_models
+    mr_module._available_tiers = old_available_tiers
+    mr_module._default_tier = old_default_tier
+    mr_module._active_tier.set(None)
 
 
 @pytest.fixture
