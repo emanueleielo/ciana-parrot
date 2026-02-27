@@ -323,8 +323,8 @@ class TelegramChannel(AbstractChannel):
             return
         self._seen_updates.add(uid)
         if len(self._seen_updates) > MAX_SEEN_UPDATES:
-            cutoff = max(self._seen_updates) - MAX_SEEN_UPDATES // 2
-            self._seen_updates = {u for u in self._seen_updates if u >= cutoff}
+            # uid is always the latest (Telegram update_ids are monotonically increasing)
+            self._seen_updates = {u for u in self._seen_updates if u >= uid - MAX_SEEN_UPDATES // 2}
 
         chat = update.effective_chat
         user = update.effective_user
