@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 
 CC_PAGE_SIZE = 6
 _VALID_EFFORTS = {"low", "medium", "high"}
+_MODEL_SHORTCUTS = {
+    "opus": "claude-opus-4-6",
+    "sonnet": "claude-sonnet-4-6",
+    "haiku": "claude-haiku-4-5-20251001",
+}
 
 # Button labels — imported by channel.py for intercept matching
 CC_BTN_EXIT = "\u2190 Exit CC"
@@ -154,39 +159,54 @@ class ClaudeCodeHandler:
         elif command == "status":
             await self._cc_cmd_status(user_id, str_chat_id, keyboard)
         elif command == "cost":
-            await self._cc_cmd_cost(str_chat_id, keyboard)
+            await self._cc_cmd_cost(user_id, str_chat_id, keyboard)
+        elif command == "resume":
+            await self._cc_cmd_resume(user_id, args, str_chat_id, chat_id, keyboard)
+        elif command == "memory":
+            await self._cc_cmd_memory(user_id, str_chat_id, chat_id, keyboard)
+        elif command == "doctor":
+            await self._cc_cmd_doctor(str_chat_id, keyboard)
+        elif command == "project":
+            await self._cc_cmd_project(user_id, args, str_chat_id, chat_id, keyboard)
         else:
             await self._send(
                 str_chat_id,
-                f"Unknown command: <code>cc:{html.escape(command)}</code>\n"
-                f"Type <code>cc:help</code> for available commands.",
+                f"Unknown command: `cc:{command}`\n"
+                f"Type `cc:help` for available commands.",
                 reply_markup=keyboard,
             )
 
     async def _cc_cmd_help(self, chat_id: str, keyboard) -> None:
         await self._send(chat_id, (
-            "<b>Claude Code Commands</b>\n\n"
-            "<code>cc:help</code> — Show this help\n"
-            "<code>cc:model [name]</code> — Show or switch model\n"
-            "<code>cc:effort [level]</code> — Set effort (low, medium, high)\n"
-            "<code>cc:compact</code> — Fork session to reduce context\n"
-            "<code>cc:clear</code> — Start new conversation\n"
-            "<code>cc:status</code> — Show session info\n"
-            "<code>cc:cost</code> — Token usage info"
+            "**Claude Code Commands**\n\n"
+            "`cc:help` — Show this help\n"
+            "`cc:model [name]` — Show or switch model (opus, sonnet, haiku)\n"
+            "`cc:effort [level]` — Set effort (low, medium, high)\n"
+            "`cc:compact` — Fork session to reduce context\n"
+            "`cc:clear` — Start new conversation\n"
+            "`cc:resume [id]` — Resume a session\n"
+            "`cc:memory` — Show memory files\n"
+            "`cc:project [name]` — Switch project\n"
+            "`cc:status` — Show session info\n"
+            "`cc:cost` — Session config & usage info\n"
+            "`cc:doctor` — Check gateway health"
         ), reply_markup=keyboard)
 
     async def _cc_cmd_model(self, user_id: str, args: str, chat_id: str, keyboard) -> None:
         state = self._bridge.get_user_state(user_id)
         if not args:
             current = state.active_model or "default"
+            shortcuts = ", ".join(_MODEL_SHORTCUTS.keys())
             await self._send(chat_id, (
-                f"Current model: <code>{html.escape(current)}</code>\n"
-                f"Usage: <code>cc:model sonnet</code> or full ID"
+                f"Current model: `{current}`\n"
+                f"Usage: `cc:model {shortcuts}` or full ID"
             ), reply_markup=keyboard)
             return
-        self._bridge.set_model(user_id, args)
+        # Resolve shortcut names to full model IDs
+        model_id = _MODEL_SHORTCUTS.get(args.lower(), args)
+        self._bridge.set_model(user_id, model_id)
         await self._send(chat_id,
-                         f"Model set to <code>{html.escape(args)}</code>",
+                         f"Model set to `{model_id}`",
                          reply_markup=keyboard)
 
     async def _cc_cmd_effort(self, user_id: str, args: str, chat_id: str, keyboard) -> None:
@@ -194,28 +214,27 @@ class ClaudeCodeHandler:
         if not args:
             current = state.active_effort or "default"
             await self._send(chat_id, (
-                f"Current effort: <code>{html.escape(current)}</code>\n"
-                f"Usage: <code>cc:effort low|medium|high</code>"
+                f"Current effort: `{current}`\n"
+                f"Usage: `cc:effort low|medium|high`"
             ), reply_markup=keyboard)
             return
         level = args.lower()
         if level not in _VALID_EFFORTS:
             await self._send(chat_id,
-                             f"Invalid effort: <code>{html.escape(level)}</code> "
+                             f"Invalid effort: `{level}` "
                              f"(valid: low, medium, high)",
                              reply_markup=keyboard)
             return
         self._bridge.set_effort(user_id, level)
         await self._send(chat_id,
-                         f"Effort set to <code>{level}</code>",
+                         f"Effort set to `{level}`",
                          reply_markup=keyboard)
 
     async def _cc_cmd_compact(self, user_id: str, chat_id: str,
                               int_chat_id: int, keyboard) -> None:
         state = self._bridge.get_user_state(user_id)
         if not state.active_session_id:
-            await self._send(chat_id,
-                             "No active session. Start a conversation first.",
+            await self._send(chat_id, "No active session. Start a conversation first.",
                              reply_markup=keyboard)
             return
         await self._send(chat_id, "Forking session\u2026", reply_markup=keyboard)
@@ -225,13 +244,13 @@ class ClaudeCodeHandler:
                 cc_resp = await self._bridge.fork_session(user_id)
         if cc_resp.error:
             await self._send(chat_id,
-                             f"Fork failed: {html.escape(cc_resp.error)}",
+                             f"Fork failed: {cc_resp.error}",
                              reply_markup=keyboard)
         else:
             new_state = self._bridge.get_user_state(user_id)
             sid = (new_state.active_session_id or "unknown")[:8]
             await self._send(chat_id,
-                             f"Session forked: <code>{sid}\u2026</code>\n"
+                             f"Session forked: `{sid}\u2026`\n"
                              f"Context has been reduced.",
                              reply_markup=keyboard)
 
@@ -251,18 +270,121 @@ class ClaudeCodeHandler:
         model = state.active_model or "default"
         effort = state.active_effort or "default"
         await self._send(chat_id, (
-            f"<b>Claude Code Status</b>\n\n"
-            f"Project: <code>{html.escape(project_name)}</code>\n"
-            f"Session: <code>{session}\u2026</code>\n"
-            f"Model: <code>{html.escape(model)}</code>\n"
-            f"Effort: <code>{html.escape(effort)}</code>"
+            f"**Claude Code Status**\n\n"
+            f"Project: `{project_name}`\n"
+            f"Session: `{session}\u2026`\n"
+            f"Model: `{model}`\n"
+            f"Effort: `{effort}`"
         ), reply_markup=keyboard)
 
-    async def _cc_cmd_cost(self, chat_id: str, keyboard) -> None:
-        await self._send(chat_id,
-                         "Token usage is not available in piped mode.\n"
-                         "Check the Claude Code dashboard for details.",
-                         reply_markup=keyboard)
+    async def _cc_cmd_cost(self, user_id: str, chat_id: str, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        project_name = self._get_project_display_name(user_id)
+        session = (state.active_session_id or "new")[:8]
+        model = state.active_model or "default"
+        effort = state.active_effort or "default"
+        await self._send(chat_id, (
+            f"**Session Info**\n\n"
+            f"Project: `{project_name}`\n"
+            f"Session: `{session}\u2026`\n"
+            f"Model: `{model}`\n"
+            f"Effort: `{effort}`\n\n"
+            "Token counts are not available in piped mode.\n"
+            "Check the Claude Code dashboard for usage details."
+        ), reply_markup=keyboard)
+
+    async def _cc_cmd_resume(self, user_id: str, args: str, chat_id: str,
+                              int_chat_id: int, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        if not state.active_project:
+            await self._send(chat_id,
+                             "No active project. Use /cc to select one.",
+                             reply_markup=keyboard)
+            return
+
+        if not args:
+            await self.show_menu(user_id, chat_id)
+            return
+
+        conversations = self._bridge.list_conversations(state.active_project)
+        match = next(
+            (c for c in conversations if c.session_id.startswith(args)),
+            None,
+        )
+        if not match:
+            await self._send(chat_id,
+                             f"No session starting with `{args}`.",
+                             reply_markup=keyboard)
+            return
+
+        self._bridge.activate_session(
+            user_id, state.active_project, state.active_project_path,
+            match.session_id,
+        )
+        preview = match.first_message[:60] + "\u2026" if len(match.first_message) > 60 else match.first_message
+        await self._send(chat_id, (
+            f"Resumed session `{match.session_id[:8]}\u2026`\n"
+            f"{preview}"
+        ), reply_markup=keyboard)
+
+    async def _cc_cmd_memory(self, user_id: str, chat_id: str,
+                              int_chat_id: int, keyboard) -> None:
+        state = self._bridge.get_user_state(user_id)
+        if not state.active_session_id:
+            await self._send(chat_id,
+                             "No active session. Send a message first.",
+                             reply_markup=keyboard)
+            return
+        lock = self._user_locks.setdefault(user_id, asyncio.Lock())
+        async with lock:
+            async with typing_indicator(self._app.bot, int_chat_id):
+                cc_resp = await self._bridge.send_message(
+                    user_id, "Show the contents of CLAUDE.md memory files")
+        compact, _ = _render_cc_response(cc_resp)
+        if compact:
+            await self._send(chat_id, md_to_telegram_html(compact),
+                             reply_markup=keyboard)
+        else:
+            await self._send(chat_id, "No memory files found.",
+                             reply_markup=keyboard)
+
+    async def _cc_cmd_doctor(self, chat_id: str, keyboard) -> None:
+        ok, msg = await self._bridge.check_available()
+        status = "OK" if ok else "FAIL"
+        await self._send(chat_id, (
+            f"**Doctor**\n\n"
+            f"Gateway: `{status}`\n"
+            f"{msg}"
+        ), reply_markup=keyboard)
+
+    async def _cc_cmd_project(self, user_id: str, args: str, chat_id: str,
+                               int_chat_id: int, keyboard) -> None:
+        if not args:
+            # No argument: show project list menu
+            await self._show_project_list(user_id, chat_id=int_chat_id)
+            return
+
+        projects = self._bridge.list_projects()
+        query = args.lower()
+        match = next(
+            (p for p in projects if query in p.display_name.lower()),
+            None,
+        )
+        if not match:
+            await self._send(chat_id,
+                             f"No project matching `{args}`.\n"
+                             f"Use `cc:project` to see all projects.",
+                             reply_markup=keyboard)
+            return
+
+        self._bridge.activate_session(
+            user_id, match.encoded_name, match.real_path, session_id=None)
+        project_name = match.display_name
+        new_keyboard = _cc_reply_keyboard(project_name)
+        await self._send(chat_id, (
+            f"Switched to `{project_name}`\n"
+            f"New conversation started."
+        ), reply_markup=new_keyboard)
 
     async def _send_response(self, chat_id: int, str_chat_id: str,
                              compact: str, keyboard, inline_markup) -> None:

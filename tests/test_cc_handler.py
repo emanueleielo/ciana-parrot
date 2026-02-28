@@ -14,6 +14,7 @@ from src.channels.telegram.handlers.claude_code import (
     _pagination_row,
     _relative_time,
     _render_cc_response,
+    _MODEL_SHORTCUTS,
     CC_BTN_EXIT,
     CC_BTN_CONVERSATIONS,
     CC_PAGE_SIZE,
@@ -212,10 +213,10 @@ class TestCcCommands:
 
     @pytest.mark.asyncio
     async def test_cc_model_set(self, handler, mock_bridge, mock_send):
-        await handler.process_message("u1", "cc:model opus", 123)
-        mock_bridge.set_model.assert_called_once_with("u1", "opus")
+        await handler.process_message("u1", "cc:model some-custom-model", 123)
+        mock_bridge.set_model.assert_called_once_with("u1", "some-custom-model")
         text = mock_send.call_args[0][1]
-        assert "opus" in text
+        assert "some-custom-model" in text
 
     @pytest.mark.asyncio
     async def test_cc_effort_show(self, handler, mock_bridge, mock_send):
@@ -281,6 +282,159 @@ class TestCcCommands:
         mock_send.assert_called_once()
         text = mock_send.call_args[0][1]
         assert "Unknown command" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_model_opus_shortcut(self, handler, mock_bridge, mock_send):
+        await handler.process_message("u1", "cc:model opus", 123)
+        mock_bridge.set_model.assert_called_once_with("u1", "claude-opus-4-6")
+        text = mock_send.call_args[0][1]
+        assert "claude-opus-4-6" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_model_sonnet_shortcut(self, handler, mock_bridge, mock_send):
+        await handler.process_message("u1", "cc:model sonnet", 123)
+        mock_bridge.set_model.assert_called_once_with("u1", "claude-sonnet-4-6")
+
+    @pytest.mark.asyncio
+    async def test_cc_model_haiku_shortcut(self, handler, mock_bridge, mock_send):
+        await handler.process_message("u1", "cc:model haiku", 123)
+        mock_bridge.set_model.assert_called_once_with("u1", "claude-haiku-4-5-20251001")
+
+    @pytest.mark.asyncio
+    async def test_cc_model_full_id_passthrough(self, handler, mock_bridge, mock_send):
+        await handler.process_message("u1", "cc:model claude-opus-4-6", 123)
+        mock_bridge.set_model.assert_called_once_with("u1", "claude-opus-4-6")
+
+    @pytest.mark.asyncio
+    async def test_cc_cost_shows_config(self, handler, mock_bridge, mock_send):
+        mock_bridge.get_user_state.return_value = UserSession(
+            active_model="opus",
+            active_effort="high",
+            active_session_id="abc12345",
+            active_project_path="/tmp/my-proj",
+        )
+        await handler.process_message("u1", "cc:cost", 123)
+        text = mock_send.call_args[0][1]
+        assert "opus" in text
+        assert "high" in text
+        assert "Session Info" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_resume_no_project(self, handler, mock_bridge, mock_send):
+        mock_bridge.get_user_state.return_value = UserSession()
+        await handler.process_message("u1", "cc:resume", 123)
+        text = mock_send.call_args[0][1]
+        assert "No active project" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_resume_with_id(self, handler, mock_bridge, mock_send):
+        mock_bridge.get_user_state.return_value = UserSession(
+            mode="claude_code",
+            active_project="proj",
+            active_project_path="/tmp/proj",
+        )
+        mock_bridge.list_conversations.return_value = [
+            ConversationInfo(
+                session_id="abc12345-full-id",
+                first_message="hello world",
+                timestamp=datetime.now(tz=timezone.utc),
+                message_count=3,
+            ),
+        ]
+        await handler.process_message("u1", "cc:resume abc1", 123)
+        mock_bridge.activate_session.assert_called_once_with(
+            "u1", "proj", "/tmp/proj", "abc12345-full-id",
+        )
+        text = mock_send.call_args[0][1]
+        assert "Resumed" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_resume_no_match(self, handler, mock_bridge, mock_send):
+        mock_bridge.get_user_state.return_value = UserSession(
+            mode="claude_code",
+            active_project="proj",
+            active_project_path="/tmp/proj",
+        )
+        mock_bridge.list_conversations.return_value = []
+        await handler.process_message("u1", "cc:resume xyz", 123)
+        text = mock_send.call_args[0][1]
+        assert "No session" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_memory_no_session(self, handler, mock_bridge, mock_send):
+        mock_bridge.get_user_state.return_value = UserSession()
+        await handler.process_message("u1", "cc:memory", 123)
+        text = mock_send.call_args[0][1]
+        assert "No active session" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_memory_success(self, handler, mock_bridge, mock_send):
+        mock_bridge.get_user_state.return_value = UserSession(
+            active_session_id="abc12345",
+            active_project="proj",
+            active_project_path="/tmp/proj",
+        )
+        mock_bridge.send_message = AsyncMock(
+            return_value=CCResponse(events=[TextEvent(text="# Memory\nHello")])
+        )
+        await handler.process_message("u1", "cc:memory", 123)
+        mock_bridge.send_message.assert_awaited_once()
+        # Verify the message was sent (response rendered)
+        assert mock_send.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_cc_doctor_ok(self, handler, mock_bridge, mock_send):
+        mock_bridge.check_available = AsyncMock(return_value=(True, "Claude Code v1.0"))
+        await handler.process_message("u1", "cc:doctor", 123)
+        text = mock_send.call_args[0][1]
+        assert "OK" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_doctor_fail(self, handler, mock_bridge, mock_send):
+        mock_bridge.check_available = AsyncMock(return_value=(False, "Gateway unreachable"))
+        await handler.process_message("u1", "cc:doctor", 123)
+        text = mock_send.call_args[0][1]
+        assert "FAIL" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_project_no_args(self, handler, mock_bridge, mock_app):
+        mock_bridge.list_projects.return_value = []
+        await handler.process_message("u1", "cc:project", 123)
+        # Should show project list via bot.send_message
+        mock_app.bot.send_message.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_cc_project_match(self, handler, mock_bridge, mock_send):
+        mock_bridge.list_projects.return_value = [
+            ProjectInfo(
+                encoded_name="enc1", real_path="/tmp/my-proj",
+                display_name="my-proj", conversation_count=2,
+                last_activity=datetime.now(tz=timezone.utc),
+            ),
+        ]
+        await handler.process_message("u1", "cc:project my-proj", 123)
+        mock_bridge.activate_session.assert_called_once_with(
+            "u1", "enc1", "/tmp/my-proj", session_id=None)
+        text = mock_send.call_args[0][1]
+        assert "my-proj" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_project_no_match(self, handler, mock_bridge, mock_send):
+        mock_bridge.list_projects.return_value = []
+        await handler.process_message("u1", "cc:project nonexistent", 123)
+        text = mock_send.call_args[0][1]
+        assert "No project" in text
+
+    @pytest.mark.asyncio
+    async def test_cc_help_includes_new_commands(self, handler, mock_send):
+        await handler.process_message("u1", "cc:help", 123)
+        text = mock_send.call_args[0][1]
+        assert "cc:model" in text
+        assert "opus" in text
+        assert "cc:resume" in text
+        assert "cc:memory" in text
+        assert "cc:doctor" in text
+        assert "cc:project" in text
 
 
 # ---------------------------------------------------------------------------
