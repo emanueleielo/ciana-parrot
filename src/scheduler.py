@@ -16,6 +16,11 @@ from .tools.model_router import set_active_tier, reset_active_tier
 logger = logging.getLogger(__name__)
 
 
+def _ensure_utc(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware (default to UTC)."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 class Scheduler:
     """Polls scheduled_tasks.json and executes due tasks."""
 
@@ -109,9 +114,7 @@ class Scheduler:
             if last_run:
                 return False
             try:
-                target = datetime.fromisoformat(task["value"])
-                if target.tzinfo is None:
-                    target = target.replace(tzinfo=timezone.utc)
+                target = _ensure_utc(datetime.fromisoformat(task["value"]))
                 return now >= target
             except ValueError:
                 logger.warning("Invalid once timestamp: %s", task["value"])
@@ -125,22 +128,16 @@ class Scheduler:
                 return False
             if not last_run:
                 return True
-            last = datetime.fromisoformat(last_run)
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
+            last = _ensure_utc(datetime.fromisoformat(last_run))
             return (now - last).total_seconds() >= interval
 
         elif task["type"] == "cron":
             if not last_run:
                 return True
             try:
-                last = datetime.fromisoformat(last_run)
-                if last.tzinfo is None:
-                    last = last.replace(tzinfo=timezone.utc)
+                last = _ensure_utc(datetime.fromisoformat(last_run))
                 cron = croniter(task["value"], last)
-                next_run = cron.get_next(datetime)
-                if next_run.tzinfo is None:
-                    next_run = next_run.replace(tzinfo=timezone.utc)
+                next_run = _ensure_utc(cron.get_next(datetime))
                 return now >= next_run
             except (KeyError, ValueError, TypeError):
                 logger.warning("Invalid cron expression: %s", task["value"])
