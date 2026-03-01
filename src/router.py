@@ -62,12 +62,12 @@ class MessageRouter:
         except Exception as e:
             logger.warning("Failed to sync session counters with checkpoints: %s", e)
 
-    def _load_allowed_users(self) -> dict[str, list[str]]:
+    def _load_allowed_users(self) -> dict[str, set[str]]:
         """Load allowed users from channel configs."""
-        result: dict[str, list[str]] = {}
+        result: dict[str, set[str]] = {}
         tg = self._config.channels.telegram
         if tg.allowed_users:
-            result["telegram"] = [str(u) for u in tg.allowed_users]
+            result["telegram"] = {str(u) for u in tg.allowed_users}
         return result
 
     def get_thread_id(self, channel: str, chat_id: str) -> str:
@@ -87,7 +87,7 @@ class MessageRouter:
 
     def is_user_allowed(self, channel: str, user_id: str) -> bool:
         """Check if user is in the allowlist (empty = allow all)."""
-        allowed = self._allowed_users.get(channel, [])
+        allowed = self._allowed_users.get(channel, set())
         if not allowed:
             return True
         return user_id in allowed
