@@ -21,7 +21,7 @@ _available_bridges: set[str] = set()
 def init_middleware_bridges(gateway_config) -> None:
     """Initialize bridge availability for skill filtering."""
     global _available_bridges
-    _available_bridges = set(gateway_config.bridges.keys())
+    _available_bridges = set(gateway_config.bridges)
     if _available_bridges:
         logger.info("Middleware bridges available: %s", ", ".join(sorted(_available_bridges)))
 
