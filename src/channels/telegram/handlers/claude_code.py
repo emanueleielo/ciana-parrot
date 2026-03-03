@@ -161,7 +161,7 @@ class ClaudeCodeHandler:
         elif command == "cost":
             await self._cc_cmd_cost(user_id, str_chat_id, keyboard)
         elif command == "resume":
-            await self._cc_cmd_resume(user_id, args, str_chat_id, chat_id, keyboard)
+            await self._cc_cmd_resume(user_id, args, str_chat_id, keyboard)
         elif command == "memory":
             await self._cc_cmd_memory(user_id, str_chat_id, chat_id, keyboard)
         elif command == "doctor":
@@ -263,38 +263,31 @@ class ClaudeCodeHandler:
                          "Conversation cleared. Send a message to start fresh.",
                          reply_markup=keyboard)
 
-    async def _cc_cmd_status(self, user_id: str, chat_id: str, keyboard) -> None:
+    async def _cc_cmd_status(self, user_id: str, chat_id: str, keyboard,
+                             *, footer: str | None = None) -> None:
         state = self._bridge.get_user_state(user_id)
         project_name = self._get_project_display_name(user_id)
         session = (state.active_session_id or "new")[:8]
         model = state.active_model or "default"
         effort = state.active_effort or "default"
-        await self._send(chat_id, (
+        msg = (
             f"**Claude Code Status**\n\n"
             f"Project: `{project_name}`\n"
             f"Session: `{session}\u2026`\n"
             f"Model: `{model}`\n"
             f"Effort: `{effort}`"
-        ), reply_markup=keyboard)
+        )
+        if footer:
+            msg += f"\n\n{footer}"
+        await self._send(chat_id, msg, reply_markup=keyboard)
 
     async def _cc_cmd_cost(self, user_id: str, chat_id: str, keyboard) -> None:
-        state = self._bridge.get_user_state(user_id)
-        project_name = self._get_project_display_name(user_id)
-        session = (state.active_session_id or "new")[:8]
-        model = state.active_model or "default"
-        effort = state.active_effort or "default"
-        await self._send(chat_id, (
-            f"**Session Info**\n\n"
-            f"Project: `{project_name}`\n"
-            f"Session: `{session}\u2026`\n"
-            f"Model: `{model}`\n"
-            f"Effort: `{effort}`\n\n"
-            "Token counts are not available in piped mode.\n"
-            "Check the Claude Code dashboard for usage details."
-        ), reply_markup=keyboard)
+        await self._cc_cmd_status(user_id, chat_id, keyboard,
+                                  footer=("Token counts are not available in piped mode.\n"
+                                          "Check the Claude Code dashboard for usage details."))
 
     async def _cc_cmd_resume(self, user_id: str, args: str, chat_id: str,
-                              int_chat_id: int, keyboard) -> None:
+                              keyboard) -> None:
         state = self._bridge.get_user_state(user_id)
         if not state.active_project:
             await self._send(chat_id,
@@ -342,8 +335,7 @@ class ClaudeCodeHandler:
                     user_id, "Show the contents of CLAUDE.md memory files")
         compact, _ = _render_cc_response(cc_resp)
         if compact:
-            await self._send(chat_id, md_to_telegram_html(compact),
-                             reply_markup=keyboard)
+            await self._send(chat_id, compact, reply_markup=keyboard)
         else:
             await self._send(chat_id, "No memory files found.",
                              reply_markup=keyboard)

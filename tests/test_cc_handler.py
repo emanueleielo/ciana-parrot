@@ -317,7 +317,8 @@ class TestCcCommands:
         text = mock_send.call_args[0][1]
         assert "opus" in text
         assert "high" in text
-        assert "Session Info" in text
+        assert "Claude Code Status" in text
+        assert "Token counts" in text
 
     @pytest.mark.asyncio
     async def test_cc_resume_no_project(self, handler, mock_bridge, mock_send):
