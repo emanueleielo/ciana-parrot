@@ -568,6 +568,53 @@ class ClaudeCodeBridge:
                 "active_effort": state.active_effort,
             })
 
+    def get_conversation_messages(
+        self, project_encoded: str, session_id: str, max_messages: int = 8,
+    ) -> tuple[int, list[tuple[str, str]]]:
+        """Read the last *max_messages* user/assistant entries from a session.
+
+        Returns ``(total_count, messages)`` where each message is
+        ``(role, text_preview)`` with *role* being ``"user"`` or ``"assistant"``.
+        """
+        jsonl_path = self._projects_dir / project_encoded / f"{session_id}.jsonl"
+        if not jsonl_path.exists():
+            return 0, []
+
+        messages: list[tuple[str, str]] = []
+        try:
+            with open(jsonl_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    role = data.get("message", {}).get("role", "") or data.get("type", "")
+                    if role not in ("user", "assistant"):
+                        continue
+
+                    content = data.get("message", {}).get("content", "")
+                    if isinstance(content, list):
+                        texts = [
+                            b.get("text", "")
+                            for b in content
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        ]
+                        content = " ".join(texts)
+                    if not isinstance(content, str) or not content.strip():
+                        continue
+
+                    preview = _clean_preview(content.strip()) if role == "user" else content.strip()[:120]
+                    messages.append((role, preview))
+        except OSError:
+            return 0, []
+
+        total = len(messages)
+        return total, messages[-max_messages:]
+
     def _detect_new_session(self, project_encoded: str,
                             known_sessions: set[str]) -> Optional[str]:
         project_dir = self._projects_dir / project_encoded
