@@ -751,13 +751,31 @@ class ClaudeCodeHandler:
             user_id, project.encoded_name, project.real_path, conv.session_id
         )
 
-        preview = conv.first_message[:80] + "..." if len(conv.first_message) > 80 else conv.first_message
+        # Build conversation history preview
+        total, messages = self._bridge.get_conversation_messages(
+            project.encoded_name, conv.session_id, max_messages=8,
+        )
+
+        lines = [
+            f"<b>Claude Code mode active</b>\n",
+            f"Project: <code>{html.escape(project.display_name)}</code>",
+            f"Session: <code>{conv.session_id[:8]}...</code>",
+        ]
+
+        if messages:
+            lines.append(f"\n\U0001f4e8 {total} messages\n")
+            if total > len(messages):
+                lines.append(f"<i>... {total - len(messages)} earlier messages</i>\n")
+            for role, text in messages:
+                icon = "\U0001f464" if role == "user" else "\U0001f916"
+                lines.append(f"{icon} {html.escape(text)}")
+        else:
+            lines.append(f"\nPreview: {html.escape(conv.first_message[:80])}")
+
+        lines.append("\nSend a message to continue this conversation.")
+
         await message.edit_text(
-            f"<b>Claude Code mode active</b>\n\n"
-            f"Project: <code>{html.escape(project.display_name)}</code>\n"
-            f"Session: <code>{conv.session_id[:8]}...</code>\n"
-            f"Preview: {html.escape(preview)}\n\n"
-            f"Send a message to continue this conversation.",
+            "\n".join(lines),
             parse_mode="HTML",
             reply_markup=_cc_mode_buttons(),
         )
