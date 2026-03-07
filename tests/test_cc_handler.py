@@ -1,7 +1,10 @@
 """Tests for ClaudeCodeHandler — commands, callbacks, message processing."""
 
 import asyncio
+import json
+import tempfile
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 import pytest
@@ -20,7 +23,7 @@ from src.channels.telegram.handlers.claude_code import (
     CC_PAGE_SIZE,
 )
 from src.gateway.bridges.claude_code.bridge import (
-    CCResponse, UserSession, ConversationInfo, ProjectInfo,
+    ClaudeCodeBridge, CCResponse, UserSession, ConversationInfo, ProjectInfo,
 )
 from src.events import TextEvent, ToolCallEvent, ThinkingEvent
 
@@ -46,6 +49,7 @@ def mock_bridge():
     bridge.fork_session = AsyncMock(
         return_value=CCResponse(events=[TextEvent(text="forked")])
     )
+    bridge.get_conversation_messages = MagicMock(return_value=(0, []))
     return bridge
 
 
@@ -715,6 +719,43 @@ class TestCallbackRouter:
         )
 
     @pytest.mark.asyncio
+    async def test_conv_activate_shows_history(self, handler, mock_bridge, mock_send):
+        """Activating a conversation displays last messages preview."""
+        now = datetime.now(tz=timezone.utc)
+        project = ProjectInfo(
+            encoded_name="proj-a",
+            real_path="/tmp/proj-a",
+            display_name="proj-a",
+            conversation_count=1,
+            last_activity=now,
+        )
+        conv = ConversationInfo(
+            session_id="sess-abc123",
+            first_message="Hello",
+            timestamp=now,
+            message_count=5,
+        )
+        mock_bridge.get_conversation_messages.return_value = (
+            5,
+            [
+                ("user", "Fix the login bug"),
+                ("assistant", "I'll look at auth.py"),
+                ("user", "Add tests too"),
+            ],
+        )
+        handler._projects_cache["123"] = [project]
+        handler._conversations_cache["123"] = [conv]
+        update, query = _make_query("cc:conv:0:0")
+        await handler._handle_callback(update, MagicMock())
+        edit_text = query.message.edit_text
+        edit_text.assert_awaited_once()
+        html_text = edit_text.call_args[0][0]
+        assert "5 messages" in html_text
+        assert "Fix the login bug" in html_text
+        assert "I&#x27;ll look at auth.py" in html_text
+        assert "2 earlier messages" in html_text
+
+    @pytest.mark.asyncio
     async def test_new_conversation(self, handler, mock_bridge, mock_send):
         now = datetime.now(tz=timezone.utc)
         project = ProjectInfo(
@@ -818,3 +859,86 @@ class TestProcessMessageLocked:
         mock_send.assert_called_once()
         text = mock_send.call_args[0][1]
         assert "error" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Bridge: get_conversation_messages
+# ---------------------------------------------------------------------------
+
+class TestGetConversationMessages:
+    """Test ClaudeCodeBridge.get_conversation_messages with real JSONL files."""
+
+    def _write_jsonl(self, path: Path, records: list[dict]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as f:
+            for rec in records:
+                f.write(json.dumps(rec) + "\n")
+
+    def _make_bridge(self, projects_dir: str) -> ClaudeCodeBridge:
+        """Create a bridge with mocked config pointing to a temp projects dir."""
+        config = MagicMock()
+        config.claude_code.claude_path = "claude"
+        config.claude_code.projects_dir = projects_dir
+        config.claude_code.timeout = 30
+        config.claude_code.permission_mode = None
+        config.claude_code.bridge_url = ""
+        config.claude_code.bridge_token = ""
+        config.claude_code.state_file = str(Path(projects_dir) / "state.json")
+        config.gateway.url = ""
+        config.gateway.token = ""
+        return ClaudeCodeBridge(config)
+
+    def test_returns_last_messages(self, tmp_path):
+        proj_dir = tmp_path / "projects" / "proj-a"
+        records = [
+            {"type": "user", "message": {"role": "user", "content": "msg 1"}},
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "reply 1"}]}},
+            {"type": "user", "message": {"role": "user", "content": "msg 2"}},
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "reply 2"}]}},
+            {"type": "user", "message": {"role": "user", "content": "msg 3"}},
+        ]
+        self._write_jsonl(proj_dir / "sess-1.jsonl", records)
+        bridge = self._make_bridge(str(tmp_path / "projects"))
+
+        total, messages = bridge.get_conversation_messages("proj-a", "sess-1", max_messages=3)
+        assert total == 5
+        assert len(messages) == 3
+        assert messages[0] == ("assistant", "reply 2")
+        assert messages[1] == ("user", "msg 3")
+
+    def test_empty_file(self, tmp_path):
+        proj_dir = tmp_path / "projects" / "proj-a"
+        self._write_jsonl(proj_dir / "sess-1.jsonl", [])
+        bridge = self._make_bridge(str(tmp_path / "projects"))
+
+        total, messages = bridge.get_conversation_messages("proj-a", "sess-1")
+        assert total == 0
+        assert messages == []
+
+    def test_missing_session(self, tmp_path):
+        proj_dir = tmp_path / "projects" / "proj-a"
+        proj_dir.mkdir(parents=True)
+        bridge = self._make_bridge(str(tmp_path / "projects"))
+
+        total, messages = bridge.get_conversation_messages("proj-a", "nonexistent")
+        assert total == 0
+        assert messages == []
+
+    def test_skips_tool_only_assistant(self, tmp_path):
+        """Assistant messages with only tool_use blocks (no text) are skipped."""
+        proj_dir = tmp_path / "projects" / "proj-a"
+        records = [
+            {"type": "user", "message": {"role": "user", "content": "do something"}},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "Read", "input": {"path": "x.py"}},
+            ]}},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "text", "text": "Done!"},
+            ]}},
+        ]
+        self._write_jsonl(proj_dir / "sess-1.jsonl", records)
+        bridge = self._make_bridge(str(tmp_path / "projects"))
+
+        total, messages = bridge.get_conversation_messages("proj-a", "sess-1")
+        assert total == 2
+        assert messages == [("user", "do something"), ("assistant", "Done!")]
