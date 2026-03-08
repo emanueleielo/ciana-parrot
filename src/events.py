@@ -41,10 +41,7 @@ def summarize_tool_input(tool_name: str, input_data: dict) -> str:
         return fp.rsplit("/", 1)[-1] if fp else ""
     if tool_name in ("Glob", "Grep", "glob", "grep"):
         return input_data.get("pattern", "")[:60]
-    if tool_name == "Bash":
-        cmd = input_data.get("command", "")
-        return cmd[:70] + "..." if len(cmd) > 70 else cmd
-    if tool_name == "host_execute":
+    if tool_name in ("Bash", "host_execute"):
         cmd = input_data.get("command", "")
         return cmd[:70] + "..." if len(cmd) > 70 else cmd
 

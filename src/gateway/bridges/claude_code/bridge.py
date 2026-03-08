@@ -592,11 +592,12 @@ class ClaudeCodeBridge:
                     except json.JSONDecodeError:
                         continue
 
-                    role = data.get("message", {}).get("role", "") or data.get("type", "")
+                    message = data.get("message", {})
+                    role = message.get("role", "") or data.get("type", "")
                     if role not in ("user", "assistant"):
                         continue
 
-                    content = data.get("message", {}).get("content", "")
+                    content = message.get("content", "")
                     if isinstance(content, list):
                         texts = [
                             b.get("text", "")
@@ -672,11 +673,12 @@ class ClaudeCodeBridge:
                             pass
 
                     msg_type = data.get("type", "")
-                    msg_role = data.get("message", {}).get("role", "")
+                    message = data.get("message", {})
+                    msg_role = message.get("role", "")
                     if msg_type == "user" or msg_role == "user":
                         message_count += 1
                         if not first_message:
-                            content = data.get("message", {}).get("content", "")
+                            content = message.get("content", "")
                             if isinstance(content, list):
                                 texts = [b.get("text", "") for b in content
                                          if isinstance(b, dict) and b.get("type") == "text"]
