@@ -66,11 +66,14 @@ def extract_agent_response(result: dict) -> AgentResponse:
             for block in content:
                 if not isinstance(block, dict):
                     continue
-                if block.get("type") == "text" and block.get("text", "").strip():
-                    events.append(TextEvent(text=block["text"].strip()))
-                elif block.get("type") == "thinking":
-                    thinking = block.get("thinking", "")
-                    if thinking.strip():
+                block_type = block.get("type")
+                if block_type == "text":
+                    text = block.get("text", "").strip()
+                    if text:
+                        events.append(TextEvent(text=text))
+                elif block_type == "thinking":
+                    thinking = block.get("thinking", "").strip()
+                    if thinking:
                         events.append(ThinkingEvent(text=thinking))
         elif isinstance(content, str) and content.strip() and not has_tool_calls:
             events.append(TextEvent(text=content.strip()))
