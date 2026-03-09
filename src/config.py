@@ -216,6 +216,12 @@ class ClaudeCodeConfig(BaseModel):
         return _empty_str_to_none(v)
 
 
+class AvatarConfig(BaseModel):
+    """Real-time avatar emotion system — relays emotions via the host gateway SSE."""
+    enabled: bool = False
+    tier: str = "lite"
+
+
 class LoggingConfig(BaseModel):
     level: str = "INFO"
 
@@ -239,6 +245,7 @@ class AppConfig(BaseModel):
     transcription: TranscriptionConfig = Field(default_factory=TranscriptionConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     model_router: ModelRouterConfig = Field(default_factory=ModelRouterConfig)
+    avatar: AvatarConfig = Field(default_factory=AvatarConfig)
     claude_code: ClaudeCodeConfig = Field(default_factory=ClaudeCodeConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
