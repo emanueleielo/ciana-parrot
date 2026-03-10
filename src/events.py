@@ -1,7 +1,7 @@
 """Shared event types for agent responses (used by both normal and CC modes)."""
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .utils import TOOL_RESULT_MAX_CHARS
 

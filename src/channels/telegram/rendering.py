@@ -1,7 +1,6 @@
 """Shared rendering for agent responses — used by both normal and CC modes."""
 
 import html
-from itertools import groupby
 
 from ...events import TextEvent, ThinkingEvent, ToolCallEvent
 from ...utils import truncate_text
