@@ -112,6 +112,14 @@ gateway:
     1password:
       allowed_commands: ["op"]
 
+# Avatar emotion system — real-time emotion display via gateway SSE.
+# After each agent response, calls the configured tier LLM to analyze
+# the emotion and pushes it to the gateway's /avatar/events SSE endpoint.
+# Requires model_router to be enabled with the specified tier available.
+# avatar:
+#   enabled: true
+#   tier: "lite"            # Model tier for emotion analysis (must exist in model_router.tiers)
+
 claude_code:
   enabled: true
   bridge_url: "http://host.docker.internal:9842"    # Host gateway for Claude Code execution
