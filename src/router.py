@@ -1,10 +1,11 @@
 """Message router - trigger detection, user allowlist, thread mapping, session logging."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Coroutine, Optional
 
 from .agent_response import AgentResponse, extract_agent_response
 from .channels.base import IncomingMessage
@@ -14,13 +15,26 @@ from .tools.cron import set_current_context
 
 logger = logging.getLogger(__name__)
 
+# Type alias for avatar hooks
+_PreHook = Callable[[], Coroutine]
+_PostHook = Callable[[str, str], Coroutine]
+
 
 class MessageRouter:
     """Routes messages from channels to the agent."""
 
-    def __init__(self, agent, config: AppConfig, checkpointer=None):
+    def __init__(
+        self,
+        agent,
+        config: AppConfig,
+        checkpointer=None,
+        pre_hook: Optional[_PreHook] = None,
+        post_hook: Optional[_PostHook] = None,
+    ):
         self._agent = agent
         self._config = config
+        self._pre_hook = pre_hook
+        self._post_hook = post_hook
         self._workspace = config.agent.workspace
         self._data_dir = config.agent.data_dir
         self._allowed_users = self._load_allowed_users()
@@ -151,6 +165,10 @@ class MessageRouter:
         logger.info("Processing: channel=%s chat=%s user=%s thread=%s",
                      msg.channel, msg.chat_id, msg.user_name, thread_id)
 
+        # Avatar pre-hook: show "thinking" animation
+        if self._pre_hook:
+            asyncio.create_task(self._pre_hook())
+
         # Build message content (multimodal if image present)
         if msg.image_base64:
             content = [
@@ -175,6 +193,10 @@ class MessageRouter:
 
         # Log response
         self._log_message(thread_id, "assistant", agent_resp.text, msg)
+
+        # Avatar post-hook: analyze emotion and broadcast (fire-and-forget)
+        if self._post_hook and agent_resp.text:
+            asyncio.create_task(self._post_hook(clean_text, agent_resp.text))
 
         return agent_resp
 
