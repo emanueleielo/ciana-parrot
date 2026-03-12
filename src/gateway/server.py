@@ -94,6 +94,15 @@ def validate_cwd(cwd: str | None, bridge: str, cwd_allowlists: dict[str, list[st
 
 class GatewayHandler(BaseHTTPRequestHandler):
 
+    def do_OPTIONS(self):
+        """CORS preflight for avatar endpoints (browser needs this)."""
+        if self.path.startswith("/avatar/"):
+            self.send_response(204)
+            self._cors_headers()
+            self.end_headers()
+        else:
+            self._respond(404, {"error": "not found"})
+
     def do_GET(self):
         if self.path == "/health":
             self._respond(200, {
@@ -168,6 +177,12 @@ class GatewayHandler(BaseHTTPRequestHandler):
             })
         except Exception as e:
             self._respond(500, {"error": str(e)})
+
+    def _cors_headers(self):
+        """Add CORS headers for avatar browser access."""
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
 
     # --- Helpers ---
 
