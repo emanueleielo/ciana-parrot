@@ -10,10 +10,23 @@ import signal
 import subprocess
 import sys
 import threading
+import webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+
+import queue
 
 MAX_CONTENT_LENGTH = 1_048_576  # 1 MB
 MAX_TIMEOUT = 600  # 10 minutes
+
+# Path to avatar.html relative to this file (src/gateway/server.py → ../../static/avatar.html)
+_REPO_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_AVATAR_HTML = os.path.join(_REPO_ROOT, "static", "avatar.html")
+
+# ── Avatar SSE relay ────────────────────────────────────────────
+# Each connected avatar browser client gets its own queue.
+# POST /avatar/emotion pushes to all queues; GET /avatar/events drains them.
+_sse_clients: list[queue.Queue] = []
+_sse_lock = threading.Lock()
 
 # Build allowlists from config, with standalone fallback.
 try:
@@ -35,6 +48,7 @@ try:
         _CWD_ALLOWLISTS[bridge_name] = [
             os.path.realpath(os.path.expanduser(p)) for p in bdef.allowed_cwd
         ]
+    _AVATAR_ENABLED = _cfg.avatar.enabled
 except Exception as e:
     import traceback
     sys.stderr.write(f"[gateway] WARNING: Failed to load config ({e}), using env-var fallback\n")
@@ -46,6 +60,7 @@ except Exception as e:
     # Standalone fallback: only claude-code bridge with "claude" command
     _ALLOWLISTS = {"claude-code": {"claude"}}
     _CWD_ALLOWLISTS = {}
+    _AVATAR_ENABLED = False
 
 
 def validate_request(data: dict, allowlists: dict[str, set[str]]) -> tuple[bool, int, str]:
