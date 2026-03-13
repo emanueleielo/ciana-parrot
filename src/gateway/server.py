@@ -124,6 +124,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "status": "ok",
                 "bridges": list(_ALLOWLISTS.keys()),
             })
+        elif self.path == "/avatar":
+            self._serve_avatar_page()
         else:
             self._respond(404, {"error": "not found"})
 
@@ -192,6 +194,22 @@ class GatewayHandler(BaseHTTPRequestHandler):
             })
         except Exception as e:
             self._respond(500, {"error": str(e)})
+
+    # --- Avatar ---
+
+    def _serve_avatar_page(self):
+        """Serve static/avatar.html — the 3D parrot avatar page."""
+        if not os.path.isfile(_AVATAR_HTML):
+            self._respond(404, {"error": "avatar.html not found"})
+            return
+        with open(_AVATAR_HTML, "rb") as f:
+            content = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(content)
 
     def _cors_headers(self):
         """Add CORS headers for avatar browser access."""
