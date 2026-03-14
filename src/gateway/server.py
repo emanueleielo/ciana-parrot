@@ -126,6 +126,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
             })
         elif self.path == "/avatar":
             self._serve_avatar_page()
+        elif self.path == "/avatar/events":
+            self._handle_avatar_sse()
         else:
             self._respond(404, {"error": "not found"})
 
@@ -210,6 +212,46 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(content)
+
+    def _handle_avatar_sse(self):
+        """SSE endpoint: streams emotion events to avatar browser clients."""
+        if not _AVATAR_ENABLED:
+            self._respond(404, {"error": "avatar not enabled"})
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self._cors_headers()
+        self.end_headers()
+
+        q: queue.Queue = queue.Queue()
+        with _sse_lock:
+            _sse_clients.append(q)
+        sys.stderr.write(f"[gateway] Avatar SSE client connected ({len(_sse_clients)} total)\n")
+
+        try:
+            # Send initial idle event
+            self.wfile.write(b'data: {"action":"idle","text":"Ciao! Sono qui \\ud83d\\udc4b"}\n\n')
+            self.wfile.flush()
+
+            while True:
+                try:
+                    event = q.get(timeout=30)
+                    self.wfile.write(f"data: {event}\n\n".encode())
+                    self.wfile.flush()
+                except queue.Empty:
+                    # Heartbeat keeps the connection alive
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            with _sse_lock:
+                if q in _sse_clients:
+                    _sse_clients.remove(q)
+            sys.stderr.write(f"[gateway] Avatar SSE client disconnected ({len(_sse_clients)} remaining)\n")
 
     def _cors_headers(self):
         """Add CORS headers for avatar browser access."""
