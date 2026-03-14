@@ -132,6 +132,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._respond(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.path == "/avatar/emotion":
+            self._handle_avatar_emotion()
+            return
         if self.path != "/execute":
             self._respond(404, {"error": "not found"})
             return
@@ -252,6 +255,41 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 if q in _sse_clients:
                     _sse_clients.remove(q)
             sys.stderr.write(f"[gateway] Avatar SSE client disconnected ({len(_sse_clients)} remaining)\n")
+
+    def _handle_avatar_emotion(self):
+        """Receive an emotion event from Docker and relay to all SSE clients."""
+        if not _AVATAR_ENABLED:
+            self._respond(404, {"error": "avatar not enabled"})
+            return
+        if not self._check_auth():
+            return
+
+        data = self._read_json()
+        if data is None:
+            return
+
+        action = data.get("action", "idle")
+        text = data.get("text", "")
+        event_json = json.dumps({"action": action, "text": text}, ensure_ascii=False)
+
+        with _sse_lock:
+            dead = []
+            for q in _sse_clients:
+                try:
+                    q.put_nowait(event_json)
+                except queue.Full:
+                    dead.append(q)
+            for q in dead:
+                _sse_clients.remove(q)
+
+        sys.stderr.write(f"[gateway] Avatar emotion: {action} — {text} (→ {len(_sse_clients)} clients)\n")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self._cors_headers()
+        body = b'{"status":"ok"}'
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _cors_headers(self):
         """Add CORS headers for avatar browser access."""
