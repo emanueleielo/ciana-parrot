@@ -123,6 +123,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._respond(200, {
                 "status": "ok",
                 "bridges": list(_ALLOWLISTS.keys()),
+                "avatar": _AVATAR_ENABLED,
             })
         elif self.path == "/avatar":
             self._serve_avatar_page()
@@ -339,6 +340,7 @@ if __name__ == "__main__":
 
     print(f"Host gateway on 0.0.0.0:{PORT}")
     print(f"Bridges: {', '.join(_ALLOWLISTS.keys()) or '(none)'}")
+    print(f"Avatar SSE: {'enabled' if _AVATAR_ENABLED else 'disabled'}")
     print("Auth: enabled")
     server = ThreadingHTTPServer(("0.0.0.0", PORT), GatewayHandler)
     server.daemon_threads = True
@@ -354,6 +356,12 @@ if __name__ == "__main__":
 
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
+
+    # Auto-open avatar in browser when enabled
+    if _AVATAR_ENABLED:
+        avatar_url = f"http://localhost:{PORT}/avatar"
+        print(f"Avatar: {avatar_url}")
+        webbrowser.open(avatar_url)
 
     stop.wait()
     server.shutdown()
