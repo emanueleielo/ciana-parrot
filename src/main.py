@@ -4,6 +4,7 @@ import asyncio
 import logging
 import signal
 
+from .avatar import AvatarBridge
 from .gateway.bridges.claude_code import setup_bridge
 from .config import load_config
 from .agent import create_cianaparrot_agent
@@ -35,8 +36,21 @@ async def main() -> None:
     agent, checkpointer, mcp_client = await create_cianaparrot_agent(config)
     logger.info("Agent ready")
 
+    # Avatar emotion system (relays via gateway SSE)
+    pre_hook = None
+    post_hook = None
+    if config.avatar.enabled:
+        avatar = AvatarBridge(config.avatar, config.gateway)
+        avatar.init_llm()
+        pre_hook = avatar.on_user_message
+        post_hook = avatar.on_agent_response
+        logger.info("Avatar emotion system enabled (tier: %s)", config.avatar.tier)
+
     # Router
-    router = MessageRouter(agent, config, checkpointer=checkpointer)
+    router = MessageRouter(
+        agent, config, checkpointer=checkpointer,
+        pre_hook=pre_hook, post_hook=post_hook,
+    )
 
     # Channels
     channels = []
