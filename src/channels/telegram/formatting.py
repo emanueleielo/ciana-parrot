@@ -87,7 +87,9 @@ def _could_be_table_row(line: str) -> bool:
     stripped = line.strip()
     if not stripped:
         return False
-    return stripped.startswith('|') or stripped.count('|') >= 2
+    if stripped.startswith('|'):
+        return True
+    return stripped.count('|') >= 2
 
 
 def _is_table_separator(line: str) -> bool:
@@ -97,7 +99,7 @@ def _is_table_separator(line: str) -> bool:
         stripped = stripped[1:]
     if stripped.endswith('|'):
         stripped = stripped[:-1]
-    return bool(stripped) and bool(re.match(r'^[\s\-:|]+$', stripped)) and '-' in stripped
+    return bool(stripped) and '-' in stripped and bool(re.match(r'^[\s\-:|]+$', stripped))
 
 
 def _parse_table_cells(line: str) -> list[str]:
