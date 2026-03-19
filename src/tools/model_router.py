@@ -128,7 +128,7 @@ class RoutingChatModel(BaseChatModel):
             tier = _active_tier.get() or default_tier
             if tier not in pre_bound:
                 tier = default_tier
-            bound = pre_bound.get(tier)
+            bound = pre_bound[tier]  # tier guaranteed in pre_bound after fallback above
             if bound is None:
                 raise ValueError(
                     f"No model for tier '{tier}'. "
