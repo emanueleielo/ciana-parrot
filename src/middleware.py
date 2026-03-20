@@ -72,8 +72,10 @@ def _check_bridge_requirements(requires, skill_name):
     if not requires:
         return True
     if isinstance(requires, str):
-        requires = [requires]
-    missing = [b for b in requires if b not in _available_bridges]
+        requires = {requires}
+    else:
+        requires = set(requires)
+    missing = requires - _available_bridges
     if missing:
         logger.debug(
             "Skill '%s' skipped — missing bridge: %s",
