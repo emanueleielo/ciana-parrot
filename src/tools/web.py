@@ -3,6 +3,8 @@
 import logging
 from typing import Optional
 
+from html.parser import HTMLParser
+
 import httpx
 from langchain_core.tools import tool
 from markdownify import markdownify
@@ -59,8 +61,6 @@ async def _ddg_search(query: str, max_results: int) -> str:
         )
     resp.raise_for_status()
     # Parse simple results from DDG HTML
-    from html.parser import HTMLParser
-
     class DDGParser(HTMLParser):
         def __init__(self):
             super().__init__()
