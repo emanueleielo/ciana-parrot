@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 PROMPT_PREVIEW_LEN = 60
 
+_VALID_SCHEDULE_TYPES = frozenset(("cron", "interval", "once"))
+
 # Module-level config, set by init_cron_tools()
 _data_file: str = "./data/scheduled_tasks.json"
 
@@ -72,7 +74,7 @@ async def schedule_task(prompt: str, schedule_type: str, schedule_value: str, mo
         schedule_value: The schedule value matching the type.
         model_tier: Optional model tier for execution (e.g. 'lite', 'advanced', 'expert'). Empty = default.
     """
-    if schedule_type not in ("cron", "interval", "once"):
+    if schedule_type not in _VALID_SCHEDULE_TYPES:
         return f"Invalid schedule_type: {schedule_type}. Use 'cron', 'interval', or 'once'."
 
     # Validate schedule_value based on type
