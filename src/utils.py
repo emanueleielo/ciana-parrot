@@ -9,8 +9,6 @@ def truncate_text(text: str,
                   max_chars: int = TOOL_RESULT_MAX_CHARS,
                   max_lines: int = TOOL_RESULT_MAX_LINES) -> str:
     """Truncate text by line count and character count, with context."""
-    total_lines = text.count("\n") + 1
-    total_chars = len(text)
     lines = text.splitlines()
     truncated = False
 
@@ -27,8 +25,9 @@ def truncate_text(text: str,
         truncated = True
 
     if truncated:
+        total_lines = text.count("\n") + 1
         omitted_lines = total_lines - result.count("\n") - 1
-        omitted_chars = total_chars - len(result)
+        omitted_chars = len(text) - len(result)
         result = (result.rstrip()
                   + f"\n... ({omitted_lines} more lines, "
                     f"{omitted_chars} more chars omitted)")
