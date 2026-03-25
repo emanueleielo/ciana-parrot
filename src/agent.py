@@ -47,6 +47,8 @@ async def create_cianaparrot_agent(config: AppConfig):
         model_kwargs["max_tokens"] = config.provider.max_tokens
     if config.provider.base_url:
         model_kwargs["base_url"] = config.provider.base_url
+    if config.provider.api_key:
+        model_kwargs["api_key"] = config.provider.api_key
 
     base_model = init_chat_model(
         f"{provider_name}:{model_name}",
@@ -94,6 +96,8 @@ async def create_cianaparrot_agent(config: AppConfig):
                     tier_kwargs["max_tokens"] = tier_cfg.max_tokens
                 if tier_cfg.base_url:
                     tier_kwargs["base_url"] = tier_cfg.base_url
+                if tier_cfg.api_key:
+                    tier_kwargs["api_key"] = tier_cfg.api_key
                 tier_models[tier_name] = init_chat_model(
                     f"{tier_cfg.name}:{tier_cfg.model}", **tier_kwargs
                 )
