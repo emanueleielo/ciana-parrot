@@ -378,8 +378,10 @@ class ClaudeCodeBridge:
             if proc.returncode == 0:
                 return True, stdout.decode().strip()
             return False, stderr.decode().strip()
-        except (FileNotFoundError, TimeoutError):
+        except FileNotFoundError:
             return False, "claude CLI not found in PATH"
+        except TimeoutError:
+            return False, "claude --version timed out (CLI installed but unresponsive)"
         except Exception as e:
             return False, str(e)
 
