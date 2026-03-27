@@ -671,7 +671,7 @@ class ClaudeCodeBridge:
                                 timestamp = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                             elif isinstance(ts, (int, float)):
                                 timestamp = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
-                        except (ValueError, OSError):
+                        except (ValueError, OSError, OverflowError):
                             pass
 
                     msg_type = data.get("type", "")
