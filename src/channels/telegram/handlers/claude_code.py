@@ -34,7 +34,7 @@ _VALID_EFFORTS = {"low", "medium", "high"}
 _MODEL_SHORTCUTS = {
     "opus": "claude-opus-4-6",
     "sonnet": "claude-sonnet-4-6",
-    "haiku": "claude-haiku-4-5-20251001",
+    "haiku": "claude-haiku-4-5",
 }
 
 # Button labels — imported by channel.py for intercept matching
