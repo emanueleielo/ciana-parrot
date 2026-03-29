@@ -112,7 +112,7 @@ async def schedule_task(prompt: str, schedule_type: str, schedule_value: str, mo
     if model_tier:
         task["model_tier"] = model_tier
 
-    async with _tasks_lock:
+    async with get_tasks_lock():
         tasks = _load_tasks()
         tasks.append(task)
         _save_tasks(tasks)
@@ -126,7 +126,7 @@ async def schedule_task(prompt: str, schedule_type: str, schedule_value: str, mo
 @tool
 async def list_tasks() -> str:
     """List all active scheduled tasks."""
-    async with _tasks_lock:
+    async with get_tasks_lock():
         tasks = _load_tasks()
     active = [t for t in tasks if t.get("active", True)]
     if not active:
@@ -144,7 +144,7 @@ async def list_tasks() -> str:
 @tool
 async def cancel_task(task_id: str) -> str:
     """Cancel a scheduled task by its ID."""
-    async with _tasks_lock:
+    async with get_tasks_lock():
         tasks = _load_tasks()
         for t in tasks:
             if t["id"] == task_id:
