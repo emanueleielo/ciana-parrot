@@ -66,7 +66,7 @@ async def _ddg_search(query: str, max_results: int) -> str:
             super().__init__()
             self.results: list[dict] = []
             self._in_title = False
-            self._in_snippet = False
+            self._snippet_depth = 0
             self._current: dict = {}
 
         def handle_starttag(self, tag, attrs):
@@ -76,21 +76,23 @@ async def _ddg_search(query: str, max_results: int) -> str:
                 self._in_title = True
                 self._current = {"title": "", "url": attrs_d.get("href", ""), "snippet": ""}
             elif tag == "a" and "result__snippet" in cls:
-                self._in_snippet = True
+                self._snippet_depth = 1
+            elif tag == "a" and self._snippet_depth > 0:
+                self._snippet_depth += 1
 
         def handle_endtag(self, tag):
             if tag == "a" and self._in_title:
                 self._in_title = False
-            elif tag == "a" and self._in_snippet:
-                self._in_snippet = False
-                if self._current:
+            elif tag == "a" and self._snippet_depth > 0:
+                self._snippet_depth -= 1
+                if self._snippet_depth == 0 and self._current:
                     self.results.append(self._current)
                     self._current = {}
 
         def handle_data(self, data):
             if self._in_title and self._current:
                 self._current["title"] += data
-            elif self._in_snippet and self._current:
+            elif self._snippet_depth > 0 and self._current:
                 self._current["snippet"] += data
 
     parser = DDGParser()
