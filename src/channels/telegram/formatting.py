@@ -200,5 +200,5 @@ def split_text(text: str, max_len: int) -> list[str]:
         if idx == -1:
             idx = max_len
         chunks.append(text[:idx])
-        text = text[idx + 1:]
+        text = text[idx:] if idx == max_len else text[idx + 1:]
     return chunks
