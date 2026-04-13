@@ -153,11 +153,11 @@ class Scheduler:
         """
         try:
             tier = task.get("model_tier")
-            if tier:
-                set_active_tier(tier)
-                logger.info("Task %s: active tier set to '%s'", task["id"], tier)
-
             try:
+                if tier:
+                    set_active_tier(tier)
+                    logger.info("Task %s: active tier set to '%s'", task["id"], tier)
+
                 thread_id = f"scheduler_{task['id']}"
                 result = await self._agent.ainvoke(
                     {"messages": [{"role": "user", "content": task["prompt"]}]},
