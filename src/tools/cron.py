@@ -95,7 +95,7 @@ async def schedule_task(prompt: str, schedule_type: str, schedule_value: str, mo
         try:
             datetime.fromisoformat(schedule_value)
         except ValueError:
-            return f"Invalid ISO timestamp: '{schedule_value}'. Use format like '2025-01-15T10:00:00'."
+            return f"Invalid ISO timestamp: '{schedule_value}'. Use format like '2026-05-15T10:00:00'."
 
     channel = _current_channel.get()
     chat_id = _current_chat_id.get()
