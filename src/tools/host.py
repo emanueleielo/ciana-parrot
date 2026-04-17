@@ -68,12 +68,14 @@ async def host_execute(bridge: str, command: str, timeout: int = 0) -> str:
     output = result.stdout.strip()
     if result.returncode != 0:
         stderr = result.stderr.strip()
+        parts = [f"Command failed (exit {result.returncode}):"]
         if stderr:
-            output = f"Command failed (exit {result.returncode}):\n{stderr}"
-        elif output:
-            output = f"Command failed (exit {result.returncode}):\n{output}"
-        else:
-            output = f"Command failed with exit code {result.returncode}."
+            parts.append(stderr)
+        if output:
+            parts.append(f"[stdout]\n{output}" if stderr else output)
+        if len(parts) == 1:
+            parts.append("(no output)")
+        output = "\n".join(parts)
 
     if not output:
         return "(no output)"
