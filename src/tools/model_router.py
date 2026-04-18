@@ -182,7 +182,7 @@ async def switch_model(tier: str = "expert") -> str:
         tier: Model tier to switch to — one of: lite, standard, advanced, expert.
     """
     if tier not in _tier_models:
-        return f"Unknown tier '{tier}'. Available: {_available_tiers}"
+        return f"Unknown tier '{tier}'. Available: {', '.join(_available_tiers)}"
 
     _active_tier.set(tier)
     logger.info("Model tier switched to '%s'", tier)
