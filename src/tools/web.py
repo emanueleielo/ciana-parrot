@@ -43,8 +43,8 @@ async def _brave_search(query: str, max_results: int) -> str:
             params={"q": query, "count": max_results},
             headers={"X-Subscription-Token": _brave_api_key},
         )
-    resp.raise_for_status()
-    data = resp.json()
+        resp.raise_for_status()
+        data = resp.json()
     results = []
     for item in data.get("web", {}).get("results", [])[:max_results]:
         results.append(f"**{item['title']}**\n{item['url']}\n{item.get('description', '')}")
@@ -59,7 +59,7 @@ async def _ddg_search(query: str, max_results: int) -> str:
             params={"q": query},
             headers={"User-Agent": "CianaParrot/0.1"},
         )
-    resp.raise_for_status()
+        resp.raise_for_status()
     # Parse simple results from DDG HTML
     class DDGParser(HTMLParser):
         def __init__(self):
