@@ -72,6 +72,7 @@ def reset_tool_globals():
     old_brave = web._brave_api_key
     old_timeout = web._fetch_timeout
     old_data_file = cron._data_file
+    old_tasks_lock = cron._tasks_lock
     old_host_client = host._gateway_client
     old_host_bridges = host._available_bridges
     old_host_timeout = host._default_timeout
@@ -89,6 +90,7 @@ def reset_tool_globals():
     web._brave_api_key = old_brave
     web._fetch_timeout = old_timeout
     cron._data_file = old_data_file
+    cron._tasks_lock = old_tasks_lock
     host._gateway_client = old_host_client
     host._available_bridges = old_host_bridges
     host._default_timeout = old_host_timeout
