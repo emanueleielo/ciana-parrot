@@ -1,3 +1,8 @@
+---
+title: Architecture Overview
+description: "How CianaParrot is put together: the Docker-hosted message router, LangGraph agent, scheduler and Telegram channel, the host gateway that bridges to local CLI tools, the startup sequence and key design decisions."
+---
+
 # Architecture Overview
 
 CianaParrot is a self-hosted AI personal assistant built on the **DeepAgents** framework with LangChain/LangGraph. It combines interactive chat via Telegram with autonomous scheduled tasks, and bridges to host-side CLI tools through a secure HTTP gateway.

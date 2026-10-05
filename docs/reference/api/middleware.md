@@ -1,5 +1,6 @@
 ---
 title: Middleware API
+description: "API reference for the CianaParrot middleware module: init_middleware_bridges, skill filtering with requires_env and requires_bridge, YAML auto-fix, and how it patches the DeepAgents skill parser."
 ---
 
 # Middleware API

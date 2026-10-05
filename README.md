@@ -23,7 +23,9 @@
 
 ---
 
-CianaParrot is a self-hosted AI personal assistant that runs on your own infrastructure — sandboxed inside Docker, but connected to your OS through secure bridges. Built on the [DeepAgents](https://github.com/deepagents/deepagents) framework with LangChain/LangGraph, it combines interactive chat via Telegram with autonomous scheduled tasks — all configured through a single YAML file.
+CianaParrot is a self-hosted AI personal assistant that runs on your own infrastructure — sandboxed inside Docker, but connected to your OS through secure bridges. Built on the [DeepAgents](https://github.com/langchain-ai/deepagents) framework with LangChain/LangGraph, it combines interactive chat via Telegram with autonomous scheduled tasks — all configured through a single YAML file.
+
+**Created and maintained by [Emanuele Ielo](https://github.com/emanueleielo)** ([LinkedIn](https://www.linkedin.com/in/emanuele-ielo/)), AI Engineer and Forward Deployed Engineer based in Rome, Italy. Built on [DeepAgents](https://github.com/langchain-ai/deepagents), [LangChain](https://github.com/langchain-ai/langchain) and [LangGraph](https://github.com/langchain-ai/langgraph). Docs: [docs.cianaparrot.dev](https://docs.cianaparrot.dev).
 
 ## Features
 
