@@ -1,6 +1,6 @@
 ---
-title: CianaParrot Documentation — DeepAgents, LangGraph & MCP
-description: Developer documentation for CianaParrot, an open-source self-hosted AI assistant built on DeepAgents, LangChain and LangGraph: Telegram chat, scheduled tasks, MCP servers, skills and host bridges, deployed with Docker.
+title: "Documentation — DeepAgents, LangGraph & MCP"
+description: "Developer documentation for CianaParrot, an open-source self-hosted AI assistant built on DeepAgents, LangChain and LangGraph: Telegram chat, scheduled tasks, MCP servers, skills and host bridges, deployed with Docker."
 ---
 
 # CianaParrot
