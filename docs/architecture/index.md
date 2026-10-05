@@ -1,5 +1,6 @@
 ---
-description: How CianaParrot is put together: the Docker-hosted message router, LangGraph agent, scheduler and Telegram channel, the host gateway that bridges to local CLI tools, the startup sequence and key design decisions.
+title: Architecture Overview
+description: "How CianaParrot is put together: the Docker-hosted message router, LangGraph agent, scheduler and Telegram channel, the host gateway that bridges to local CLI tools, the startup sequence and key design decisions."
 ---
 
 # Architecture Overview
