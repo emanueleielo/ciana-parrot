@@ -1,12 +1,13 @@
 ---
-title: Home
+title: CianaParrot Documentation — DeepAgents, LangGraph & MCP
+description: Developer documentation for CianaParrot, an open-source self-hosted AI assistant built on DeepAgents, LangChain and LangGraph: Telegram chat, scheduled tasks, MCP servers, skills and host bridges, deployed with Docker.
 ---
 
 # CianaParrot
 
 **Your AI copilot, from your own station.**
 
-CianaParrot is a self-hosted AI personal assistant that combines interactive chat via Telegram with autonomous scheduled tasks -- all running on your own infrastructure. Built on the [DeepAgents](https://github.com/deepagents/deepagents) framework with LangChain/LangGraph, it gives you a capable AI agent sandboxed inside Docker but securely connected to your OS through a bridge system.
+CianaParrot is a self-hosted AI personal assistant that combines interactive chat via Telegram with autonomous scheduled tasks -- all running on your own infrastructure. Built on the [DeepAgents](https://github.com/langchain-ai/deepagents) framework with LangChain/LangGraph, it gives you a capable AI agent sandboxed inside Docker but securely connected to your OS through a bridge system.
 
 ---
 
@@ -102,3 +103,9 @@ Or follow the step-by-step [Installation Guide](getting-started/installation.md)
 | **License** | MIT |
 | **Author** | Emanuele Ielo |
 | **Repository** | [github.com/emanueleielo/ciana-parrot](https://github.com/emanueleielo/ciana-parrot) |
+
+---
+
+## About the project
+
+CianaParrot is created and maintained by [Emanuele Ielo](https://github.com/emanueleielo) ([LinkedIn](https://www.linkedin.com/in/emanuele-ielo/)), AI Engineer and Forward Deployed Engineer based in Rome, Italy. It is built on [DeepAgents](https://github.com/langchain-ai/deepagents), [LangChain](https://github.com/langchain-ai/langchain) and [LangGraph](https://github.com/langchain-ai/langgraph). Source code: [github.com/emanueleielo/ciana-parrot](https://github.com/emanueleielo/ciana-parrot) · Website: [cianaparrot.dev](https://cianaparrot.dev).
