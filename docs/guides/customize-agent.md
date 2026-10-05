@@ -1,6 +1,6 @@
 ---
 title: Customize the Agent
-description: Customize the CianaParrot agent: choose the LLM provider and model, edit memory files, set tool iteration limits, connect MCP servers, add custom tools, configure the sandbox backend, host filesystem access and skills.
+description: "Customize the CianaParrot agent: choose the LLM provider and model, edit memory files, set tool iteration limits, connect MCP servers, add custom tools, configure the sandbox backend, host filesystem access and skills."
 ---
 
 # Customize the Agent
